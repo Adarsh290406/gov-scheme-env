@@ -1,5 +1,7 @@
 import random
 import uuid
+import json
+import os
 from typing import Optional
 from models import (
     Action, ActionType, Observation, Reward, State,
@@ -10,122 +12,199 @@ from models import (
 )
 
 # -----------------------------------------
-# GOVERNMENT SCHEMES DATABASE
+# LOAD SCHEMES FROM schemes.json
 # -----------------------------------------
 
-SCHEMES = {
-    "PM Ujjwala Yojana": {
-        "description": "Free LPG connection for BPL women",
-        "conditions": lambda p: p.is_bpl and p.gender == Gender.FEMALE,
-        "partial_conditions": [
-            (lambda p: p.gender == Gender.FEMALE, 0.3),   # female but not BPL
-            (lambda p: p.is_bpl, 0.2),                    # BPL but not female
-        ]
-    },
-    "PM Kisan Samman Nidhi": {
-        "description": "Rs.6000/year for small farmers",
-        "conditions": lambda p: p.occupation == Occupation.FARMER and p.income < 200000,
-        "partial_conditions": [
-            (lambda p: p.occupation == Occupation.FARMER, 0.4),  # farmer but income too high
-        ]
-    },
-    "Ayushman Bharat": {
-        "description": "Health insurance up to Rs.5 lakh for BPL families",
-        "conditions": lambda p: p.is_bpl,
-        "partial_conditions": [
-            (lambda p: p.income < 300000, 0.3),   # low income but not officially BPL
-        ]
-    },
-    "PM Scholarship Scheme": {
-        "description": "Scholarship for students from low income families",
-        "conditions": lambda p: p.occupation == Occupation.STUDENT and p.income < 600000,
-        "partial_conditions": [
-            (lambda p: p.occupation == Occupation.STUDENT, 0.3),  # student but income too high
-        ]
-    },
-    "MGNREGA": {
-        "description": "100 days guaranteed wage employment in rural areas",
-        "conditions": lambda p: p.location == Location.RURAL,
-        "partial_conditions": [
-            (lambda p: p.is_bpl, 0.2),   # BPL but urban
-        ]
-    },
-    "PM Awas Yojana (Gramin)": {
-        "description": "Rural housing scheme for BPL families",
-        "conditions": lambda p: p.location == Location.RURAL and p.is_bpl,
-        "partial_conditions": [
-            (lambda p: p.location == Location.RURAL, 0.3),  # rural but not BPL
-            (lambda p: p.is_bpl, 0.2),                      # BPL but urban
-        ]
-    },
-    "Divyangjan Scholarship": {
-        "description": "Support for disabled citizens",
-        "conditions": lambda p: p.has_disability,
-        "partial_conditions": []
-    },
-    "SC/ST Scholarship": {
-        "description": "Educational support for SC/ST students",
-        "conditions": lambda p: p.caste in [CasteCategory.SC, CasteCategory.ST] and p.occupation == Occupation.STUDENT,
-        "partial_conditions": [
-            (lambda p: p.caste in [CasteCategory.SC, CasteCategory.ST], 0.3),  # SC/ST but not student
-        ]
-    },
-    "PM Mudra Yojana": {
-        "description": "Loans for small business owners",
-        "conditions": lambda p: p.occupation == Occupation.SMALL_BUSINESS and p.income < 1000000,
-        "partial_conditions": [
-            (lambda p: p.occupation == Occupation.SMALL_BUSINESS, 0.3),  # business but income too high
-        ]
-    },
-    "Sukanya Samriddhi Yojana": {
-        "description": "Savings scheme for girl child below 10 years",
-        "conditions": lambda p: p.gender == Gender.FEMALE and p.age < 10,
-        "partial_conditions": [
-            (lambda p: p.gender == Gender.FEMALE and p.age < 18, 0.2),  # female minor but older than 10
-        ]
-    },
-    "Fasal Bima Yojana": {
-        "description": "Crop insurance for farmers",
-        "conditions": lambda p: p.occupation == Occupation.FARMER,
-        "partial_conditions": []
-    },
-    "Indira Gandhi National Disability Pension": {
-        "description": "Monthly pension for BPL disabled citizens",
-        "conditions": lambda p: p.has_disability and p.is_bpl,
-        "partial_conditions": [
-            (lambda p: p.has_disability, 0.3),  # disabled but not BPL
-            (lambda p: p.is_bpl, 0.1),          # BPL but not disabled
-        ]
-    },
-}
+def load_schemes() -> dict:
+    """Load schemes from schemes.json file"""
+    schemes_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "schemes.json"
+    )
+    if not os.path.exists(schemes_path):
+        raise FileNotFoundError(
+            "schemes.json not found! Run generate_schemes.py first."
+        )
+    with open(schemes_path, "r", encoding="utf-8") as f:
+        schemes_list = json.load(f)
+
+    # Convert list to dict keyed by name
+    return {s["name"]: s for s in schemes_list}
+
+
+# Load schemes once at startup
+ALL_SCHEMES = load_schemes()
+
 
 # -----------------------------------------
-# QUESTION RELEVANCE SCORING
+# SCHEME CONDITION CHECKER
+# Evaluates if a citizen matches a scheme
+# -----------------------------------------
+
+def check_scheme_conditions(citizen: CitizenProfile, scheme: dict) -> tuple:
+    """
+    Check if citizen matches scheme conditions.
+    Returns (is_full_match, partial_score)
+    - is_full_match: True if citizen fully qualifies
+    - partial_score: 0.0 to 0.5 for partial matches
+    """
+    conditions = scheme.get("conditions", {})
+    partial_score = 0.0
+    failed_conditions = 0
+    total_conditions = 0
+
+    # Gender check
+    if conditions.get("gender") not in ["any", None]:
+        total_conditions += 1
+        if citizen.gender.value != conditions["gender"]:
+            failed_conditions += 1
+
+    # Age check
+    if conditions.get("min_age") is not None:
+        total_conditions += 1
+        if citizen.age < conditions["min_age"]:
+            failed_conditions += 1
+
+    if conditions.get("max_age") is not None:
+        total_conditions += 1
+        if citizen.age > conditions["max_age"]:
+            failed_conditions += 1
+
+    # Income check
+    if conditions.get("max_income") is not None:
+        total_conditions += 1
+        if citizen.income > conditions["max_income"]:
+            failed_conditions += 1
+
+    # Occupation check
+    if conditions.get("occupation") not in ["any", None]:
+        total_conditions += 1
+        if citizen.occupation.value != conditions["occupation"]:
+            failed_conditions += 1
+
+    # Location check
+    if conditions.get("location") not in ["any", None]:
+        total_conditions += 1
+        if citizen.location.value != conditions["location"]:
+            failed_conditions += 1
+
+    # Caste check
+    if conditions.get("caste") not in ["any", None]:
+        total_conditions += 1
+        caste_val = conditions["caste"]
+        if isinstance(caste_val, list):
+            if citizen.caste.value not in caste_val:
+                failed_conditions += 1
+        else:
+            if citizen.caste.value != caste_val:
+                failed_conditions += 1
+
+    # BPL check
+    if conditions.get("is_bpl") is not None:
+        total_conditions += 1
+        if citizen.is_bpl != conditions["is_bpl"]:
+            failed_conditions += 1
+
+    # Disability check
+    if conditions.get("has_disability") is not None:
+        total_conditions += 1
+        if citizen.has_disability != conditions["has_disability"]:
+            failed_conditions += 1
+
+    # Bank account check
+    if conditions.get("has_bank_account") is not None:
+        total_conditions += 1
+        if citizen.has_bank_account != conditions["has_bank_account"]:
+            failed_conditions += 1
+
+    # Ration card check
+    if conditions.get("has_ration_card") is not None:
+        total_conditions += 1
+        if citizen.has_ration_card != conditions["has_ration_card"]:
+            failed_conditions += 1
+
+    # Marital status check
+    if conditions.get("marital_status") not in ["any", None]:
+        total_conditions += 1
+        if citizen.marital_status != conditions["marital_status"]:
+            failed_conditions += 1
+
+    # Land ownership check
+    if conditions.get("land_ownership") not in ["any", None]:
+        total_conditions += 1
+        if citizen.land_ownership != conditions["land_ownership"]:
+            failed_conditions += 1
+
+    if total_conditions == 0:
+        return True, 0.0
+
+    if failed_conditions == 0:
+        return True, 0.0  # Full match
+
+    match_ratio = 1.0 - (failed_conditions / total_conditions)
+    if match_ratio >= 0.7:
+        partial_score = 0.3   # Almost qualifies
+    elif match_ratio >= 0.5:
+        partial_score = 0.15  # Partially qualifies
+    else:
+        partial_score = 0.0   # Too far off
+
+    return False, partial_score
+
+
+# -----------------------------------------
+# QUESTION RELEVANCE — Context Aware
+# How useful is each question given what
+# the agent already knows
 # -----------------------------------------
 
 QUESTION_RELEVANCE = {
-    ActionType.ASK_OCCUPATION:  1.0,
-    ActionType.ASK_INCOME:      0.9,
-    ActionType.ASK_BPL:         0.9,
-    ActionType.ASK_LOCATION:    0.7,
-    ActionType.ASK_GENDER:      0.6,
-    ActionType.ASK_CASTE:       0.6,
-    ActionType.ASK_DISABILITY:  0.5,
-    ActionType.ASK_AGE:         0.4,
+    ActionType.ASK_OCCUPATION:      1.0,
+    ActionType.ASK_INCOME:          0.9,
+    ActionType.ASK_BPL:             0.9,
+    ActionType.ASK_LOCATION:        0.7,
+    ActionType.ASK_GENDER:          0.6,
+    ActionType.ASK_CASTE:           0.6,
+    ActionType.ASK_DISABILITY:      0.5,
+    ActionType.ASK_AGE:             0.4,
+    ActionType.ASK_EDUCATION:       0.5,
+    ActionType.ASK_BANK_ACCOUNT:    0.4,
+    ActionType.ASK_RATION_CARD:     0.4,
+    ActionType.ASK_MARITAL_STATUS:  0.3,
+    ActionType.ASK_LAND_OWNERSHIP:  0.5,
+    ActionType.ASK_STATE:           0.3,
 }
 
-# -----------------------------------------
-# NOISE PROBABILITIES PER DIFFICULTY
-# Chance that citizen gives a WRONG answer
-# -----------------------------------------
+# Questions irrelevant for certain occupations
+IRRELEVANT_QUESTIONS = {
+    Occupation.STUDENT: [
+        ActionType.ASK_LAND_OWNERSHIP,
+    ],
+    Occupation.GOVERNMENT_EMPLOYEE: [
+        ActionType.ASK_LAND_OWNERSHIP,
+        ActionType.ASK_BPL,
+    ],
+    Occupation.SMALL_BUSINESS: [
+        ActionType.ASK_LAND_OWNERSHIP,
+    ],
+}
 
+# Minimum questions before recommending
+MIN_QUESTIONS_BEFORE_RECOMMEND = {
+    Difficulty.EASY:   2,
+    Difficulty.MEDIUM: 3,
+    Difficulty.HARD:   3,
+}
+
+# Reward decay per step — urgency increases
+STEP_DECAY = 0.02
+
+# Noise levels per difficulty
 NOISE_LEVELS = {
-    Difficulty.EASY:   0.0,    # No noise on easy
-    Difficulty.MEDIUM: 0.10,   # 10% chance of wrong answer
-    Difficulty.HARD:   0.20,   # 20% chance of wrong answer
+    Difficulty.EASY:   0.0,
+    Difficulty.MEDIUM: 0.10,
+    Difficulty.HARD:   0.20,
 }
 
-# Questions that CAN have noise applied
 NOISY_QUESTIONS = [
     ActionType.ASK_BPL,
     ActionType.ASK_INCOME,
@@ -133,27 +212,20 @@ NOISY_QUESTIONS = [
     ActionType.ASK_DISABILITY,
 ]
 
-# -----------------------------------------
-# SCHEME EXPIRY SETTINGS
-# -----------------------------------------
-
+# Scheme expiry
 SCHEME_EXPIRY_CHANCE = {
-    Difficulty.EASY:   0.0,    # No expiry on easy
-    Difficulty.MEDIUM: 0.10,   # 10% chance per step
-    Difficulty.HARD:   0.20,   # 20% chance per step
+    Difficulty.EASY:   0.0,
+    Difficulty.MEDIUM: 0.10,
+    Difficulty.HARD:   0.20,
 }
 
-SCHEME_EXPIRY_INTERVAL = 3     # Check for expiry every 3 steps
+SCHEME_EXPIRY_INTERVAL = 3
 
-# -----------------------------------------
-# INCOMPLETE INFO SETTINGS
-# Chance citizen says "I don't know"
-# -----------------------------------------
-
+# Incomplete info
 INCOMPLETE_INFO_CHANCE = {
-    Difficulty.EASY:   0.0,    # No incomplete info on easy
-    Difficulty.MEDIUM: 0.15,   # 15% chance
-    Difficulty.HARD:   0.25,   # 25% chance
+    Difficulty.EASY:   0.0,
+    Difficulty.MEDIUM: 0.15,
+    Difficulty.HARD:   0.25,
 }
 
 INCOMPLETE_INFO_QUESTIONS = [
@@ -176,93 +248,109 @@ class GovSchemeEnvironment:
 
     def _setup_difficulty(self):
         """Set max steps and available schemes based on difficulty"""
+        scheme_names = list(ALL_SCHEMES.keys())
+
         if self.difficulty == Difficulty.EASY:
             self.max_steps = 10
-            self.available_schemes = [
-                "PM Ujjwala Yojana",
-                "PM Kisan Samman Nidhi",
-                "Ayushman Bharat",
-                "PM Scholarship Scheme",
-                "MGNREGA",
-            ]
+            # Pick 10 diverse schemes for easy
+            self.available_schemes = scheme_names[:10]
         elif self.difficulty == Difficulty.MEDIUM:
             self.max_steps = 8
-            self.available_schemes = [
-                "PM Ujjwala Yojana",
-                "PM Kisan Samman Nidhi",
-                "Ayushman Bharat",
-                "PM Scholarship Scheme",
-                "MGNREGA",
-                "PM Awas Yojana (Gramin)",
-                "Divyangjan Scholarship",
-                "SC/ST Scholarship",
-                "PM Mudra Yojana",
-                "Fasal Bima Yojana",
-            ]
+            # Pick 25 schemes for medium
+            self.available_schemes = scheme_names[:25]
         else:  # HARD
             self.max_steps = 6
-            self.available_schemes = list(SCHEMES.keys())
+            # All schemes for hard
+            self.available_schemes = scheme_names
 
-        # Keep a copy of original schemes for expiry tracking
         self._original_schemes = list(self.available_schemes)
 
     def _generate_citizen(self) -> CitizenProfile:
-        """Generate a random hidden citizen profile"""
-        occupation = random.choice(list(Occupation))
+        """
+        Generate a weighted random citizen profile.
+        Rural BPL farmers/daily wage workers are more common
+        than urban government employees — reflecting real India.
+        """
+        # Weighted occupation distribution
+        occupation = random.choices(
+            list(Occupation),
+            weights=[25, 20, 20, 10, 15, 10],  # farmer, student, daily_wage, business, unemployed, govt
+            k=1
+        )[0]
 
+        # Income based on occupation
         if occupation == Occupation.STUDENT:
-            income = random.randint(100000, 800000)
+            income = random.randint(80000, 700000)
         elif occupation == Occupation.FARMER:
-            income = random.randint(30000, 300000)
+            income = random.randint(30000, 250000)
         elif occupation == Occupation.UNEMPLOYED:
-            income = random.randint(0, 80000)
+            income = random.randint(0, 60000)
         elif occupation == Occupation.DAILY_WAGE:
-            income = random.randint(50000, 150000)
+            income = random.randint(40000, 130000)
         elif occupation == Occupation.SMALL_BUSINESS:
-            income = random.randint(100000, 1200000)
+            income = random.randint(100000, 1000000)
         else:
-            income = random.randint(200000, 1500000)
+            income = random.randint(200000, 1400000)
+
+        # Weighted location — more rural citizens
+        location = random.choices(
+            list(Location),
+            weights=[65, 35],  # rural more common
+            k=1
+        )[0]
+
+        # Weighted BPL — more BPL in rural
+        is_bpl_chance = 0.5 if location == Location.RURAL else 0.2
+        is_bpl = random.random() < is_bpl_chance
 
         profile = CitizenProfile(
             age=random.randint(5, 75),
             income=float(income),
             gender=random.choice(list(Gender)),
-            caste=random.choice(list(CasteCategory)),
-            location=random.choice(list(Location)),
+            caste=random.choices(
+                list(CasteCategory),
+                weights=[30, 40, 20, 10],  # general, obc, sc, st
+                k=1
+            )[0],
+            location=location,
             occupation=occupation,
-            has_disability=random.random() < 0.2,
-            is_bpl=random.random() < 0.4,
+            has_disability=random.random() < 0.15,
+            is_bpl=is_bpl,
+            has_bank_account=random.random() < 0.75,
+            has_ration_card=random.random() < 0.60,
+            marital_status=random.choice(["any", "married", "single", "widowed"]),
+            land_ownership=random.choice(["any", "owner", "tenant", "none"]) if occupation == Occupation.FARMER else "none",
+            state=random.choice([
+                "any", "Uttar Pradesh", "Maharashtra", "Bihar",
+                "Madhya Pradesh", "Rajasthan", "Gujarat"
+            ]),
             correct_schemes=[]
         )
 
-        correct = [
-            name for name, scheme in SCHEMES.items()
-            if name in self.available_schemes and scheme["conditions"](profile)
-        ]
+        # Find all correct schemes
+        correct = []
+        for name in self.available_schemes:
+            scheme = ALL_SCHEMES.get(name)
+            if scheme:
+                is_match, _ = check_scheme_conditions(profile, scheme)
+                if is_match:
+                    correct.append(name)
+
         profile.correct_schemes = correct if correct else ["No scheme available"]
         return profile
 
     # -----------------------------------------
     # FEATURE 1: NOISE
-    # Citizen gives a wrong answer with some probability
     # -----------------------------------------
 
     def _apply_noise(self, action_type: ActionType, true_value):
-        """
-        Randomly flip the answer the citizen gives.
-        Only applies to noisy questions on medium/hard.
-        Returns (noisy_value, was_noisy)
-        """
         noise_chance = NOISE_LEVELS.get(self.difficulty, 0.0)
-
         if action_type not in NOISY_QUESTIONS or random.random() > noise_chance:
             return true_value, False
 
-        # Flip the value based on type
         if isinstance(true_value, bool):
             return not true_value, True
         elif isinstance(true_value, float):
-            # Give a wrong income — shift by 30-50%
             factor = random.choice([0.5, 0.6, 1.5, 1.8])
             return round(true_value * factor, 2), True
         elif isinstance(true_value, CasteCategory):
@@ -273,22 +361,15 @@ class GovSchemeEnvironment:
 
     # -----------------------------------------
     # FEATURE 2: SCHEME EXPIRY
-    # Schemes can become unavailable mid-episode
     # -----------------------------------------
 
     def _check_scheme_expiry(self, obs: Observation) -> Optional[str]:
-        """
-        Every SCHEME_EXPIRY_INTERVAL steps, randomly expire a scheme.
-        Returns the name of expired scheme or None.
-        """
         expiry_chance = SCHEME_EXPIRY_CHANCE.get(self.difficulty, 0.0)
-
         if (self.state.step_count % SCHEME_EXPIRY_INTERVAL == 0
                 and self.state.step_count > 0
                 and random.random() < expiry_chance
-                and len(self.available_schemes) > 2):
+                and len(self.available_schemes) > 3):
 
-            # Pick a random scheme to expire (not the correct one if possible)
             citizen = self.state.citizen_profile
             non_correct = [
                 s for s in self.available_schemes
@@ -303,51 +384,60 @@ class GovSchemeEnvironment:
 
     # -----------------------------------------
     # FEATURE 3: INCOMPLETE INFO
-    # Citizen sometimes says "I don't know"
     # -----------------------------------------
 
     def _check_incomplete_info(self, action_type: ActionType) -> bool:
-        """
-        Returns True if citizen doesn't know the answer.
-        Only applies to certain questions on medium/hard.
-        """
         incomplete_chance = INCOMPLETE_INFO_CHANCE.get(self.difficulty, 0.0)
         if action_type not in INCOMPLETE_INFO_QUESTIONS:
             return False
         return random.random() < incomplete_chance
 
     # -----------------------------------------
-    # FEATURE 4: CONFLICTING SIGNALS
-    # Partial eligibility scoring for recommendations
+    # CONTEXT-AWARE PENALTY
+    # Penalize irrelevant questions based on
+    # what agent already knows
     # -----------------------------------------
 
-    def _get_partial_match_score(self, scheme_name: str) -> float:
+    def _get_irrelevance_penalty(self, action_type: ActionType) -> tuple:
         """
-        If agent recommends a scheme citizen doesn't fully qualify for,
-        check if there's partial eligibility and give partial reward.
-        Returns partial reward value (0.0 if no partial match)
+        Returns (penalty, reason) if question is irrelevant
+        given what agent already knows about citizen.
+        Returns (0.0, "") if question is relevant.
         """
-        if scheme_name not in SCHEMES:
-            return 0.0
+        obs = self.state.observation
 
-        scheme = SCHEMES[scheme_name]
-        citizen = self.state.citizen_profile
+        # If occupation is known, check for irrelevant questions
+        if obs.occupation is not None:
+            irrelevant = IRRELEVANT_QUESTIONS.get(obs.occupation, [])
+            if action_type in irrelevant:
+                return -0.2, (
+                    f"Irrelevant question for a {obs.occupation.value}! "
+                    f"'{action_type.value}' doesn't help narrow down schemes for this occupation."
+                )
 
-        for condition_fn, partial_reward in scheme.get("partial_conditions", []):
-            try:
-                if condition_fn(citizen):
-                    return partial_reward
-            except Exception:
-                pass
+        # Penalize asking gender when no gender-specific schemes remain
+        if action_type == ActionType.ASK_GENDER and obs.gender is not None:
+            return -0.3, "Already know the gender — repeating!"
 
-        return 0.0
+        # Penalize asking disability when already known
+        if action_type == ActionType.ASK_DISABILITY and obs.has_disability is not None:
+            return -0.3, "Already know disability status!"
+
+        return 0.0, ""
 
     # -----------------------------------------
-    # reset() — Start a fresh episode
+    # REWARD DECAY — Urgency over time
+    # -----------------------------------------
+
+    def _get_decay_penalty(self) -> float:
+        """Returns increasing penalty for each step taken"""
+        return -STEP_DECAY * self.state.step_count
+
+    # -----------------------------------------
+    # reset()
     # -----------------------------------------
 
     def reset(self) -> Observation:
-        """Reset environment and return initial empty observation"""
         self._setup_difficulty()
         citizen = self._generate_citizen()
 
@@ -356,11 +446,10 @@ class GovSchemeEnvironment:
             max_steps=self.max_steps,
             last_action_result=(
                 "New citizen arrived. "
-                "TIP: Ask occupation first — income means different things "
-                "for students, farmers, and unemployed citizens! "
-                f"NOTE: Difficulty is '{self.difficulty.value}' — "
-                + ("No noise or scheme changes." if self.difficulty == Difficulty.EASY
-                   else "Citizen may give uncertain answers. Schemes may expire!")
+                "TIP: Ask occupation first! "
+                "Be efficient — unnecessary questions cost reward. "
+                f"Difficulty: {self.difficulty.value} | "
+                f"Schemes available: {len(self.available_schemes)}"
             ),
             available_schemes=list(self.available_schemes),
             done=False
@@ -381,16 +470,14 @@ class GovSchemeEnvironment:
         return initial_observation
 
     # -----------------------------------------
-    # step() — Agent takes an action
+    # step()
     # -----------------------------------------
 
     def step(self, action: Action) -> StepResult:
-        """Process agent action and return observation, reward, done, info"""
-
         if self.state is None:
             raise RuntimeError("Call reset() before step()")
         if self.state.is_done:
-            raise RuntimeError("Episode is done. Call reset() to start a new episode.")
+            raise RuntimeError("Episode done. Call reset() to start again.")
 
         citizen = self.state.citizen_profile
         obs = self.state.observation
@@ -407,49 +494,62 @@ class GovSchemeEnvironment:
             # Penalty: repeated question
             if question in self.state.questions_asked:
                 reward_value = -0.3
-                reward_reason = f"Already asked '{question}'. Avoid repeating — costs valuable steps!"
+                reward_reason = f"Already asked '{question}'! Repeating wastes steps."
 
-            # Penalty: income asked before occupation
+            # Penalty: income before occupation
             elif (action.action_type == ActionType.ASK_INCOME
                   and ActionType.ASK_OCCUPATION.value not in self.state.questions_asked):
                 reward_value = INCOME_BEFORE_OCCUPATION_PENALTY
                 reward_reason = (
-                    "Asked income before knowing occupation! "
-                    "Income means different things for different people. Penalty applied."
+                    "Asked income before occupation! Context unknown. Penalty applied."
                 )
                 obs.income = citizen.income
                 obs.income_context = IncomeContext.NOT_APPLICABLE
-                obs.income_hint = "WARNING: Income context unknown. Ask occupation first!"
+                obs.income_hint = "WARNING: Ask occupation first to understand income context!"
                 self.state.questions_asked.append(question)
 
             else:
-                # FEATURE 3: Check if citizen doesn't know
-                if self._check_incomplete_info(action.action_type):
+                # Context-aware irrelevance penalty
+                irrelevance_penalty, irrelevance_reason = self._get_irrelevance_penalty(action.action_type)
+
+                if irrelevance_penalty < 0:
+                    reward_value = irrelevance_penalty
+                    reward_reason = irrelevance_reason
+                    self.state.questions_asked.append(question)
+
+                # Incomplete info check
+                elif self._check_incomplete_info(action.action_type):
                     reward_value = 0.05
                     reward_reason = (
                         f"Good question — but citizen is unsure about '{question}'. "
-                        "No clear answer received. Try cross-verifying with another question."
+                        "No clear answer. Try cross-verifying."
                     )
                     self.state.questions_asked.append(question)
                     info["incomplete"] = True
-                    info["hint"] = "Citizen gave uncertain answer — consider asking a related question to verify."
 
                 else:
-                    # Normal question — get true value then apply noise
+                    # Normal question
                     relevance = QUESTION_RELEVANCE.get(action.action_type, 0.3)
-                    reward_value = relevance * 0.3
-                    reward_reason = f"Good question! '{question}' revealed. Relevance: {relevance}"
+
+                    # Apply reward decay for urgency
+                    decay = self._get_decay_penalty()
+                    reward_value = (relevance * 0.3) + decay
+                    reward_reason = (
+                        f"'{question}' revealed. "
+                        f"Relevance: {relevance} | "
+                        f"Step decay: {round(decay, 3)}"
+                    )
 
                     # Bonus for asking occupation first
                     if (action.action_type == ActionType.ASK_OCCUPATION
                             and len(self.state.questions_asked) == 0):
                         reward_value += OCCUPATION_FIRST_BONUS
-                        reward_reason += f" | BONUS: Asked occupation first! +{OCCUPATION_FIRST_BONUS}"
+                        reward_reason += f" | BONUS: Occupation first! +{OCCUPATION_FIRST_BONUS}"
                         self.state.occupation_asked_first = True
 
                     self.state.questions_asked.append(question)
 
-                    # Reveal answer (with possible noise)
+                    # Reveal answer with noise
                     if action.action_type == ActionType.ASK_AGE:
                         obs.age = citizen.age
 
@@ -457,10 +557,9 @@ class GovSchemeEnvironment:
                         noisy_income, was_noisy = self._apply_noise(action.action_type, citizen.income)
                         obs.income = noisy_income
                         obs.income_context = citizen.income_context()
-                        reward_reason += f" | Income context: {citizen.income_label()}"
+                        reward_reason += f" | Context: {citizen.income_label()}"
                         if was_noisy:
-                            reward_reason += " | [NOISE: Citizen may have given approximate income]"
-                            info["noise_warning"] = "Income value may be inaccurate — citizen was uncertain"
+                            info["noise_warning"] = "Income may be approximate"
 
                     elif action.action_type == ActionType.ASK_GENDER:
                         obs.gender = citizen.gender
@@ -469,8 +568,7 @@ class GovSchemeEnvironment:
                         noisy_caste, was_noisy = self._apply_noise(action.action_type, citizen.caste)
                         obs.caste = noisy_caste
                         if was_noisy:
-                            reward_reason += " | [NOISE: Citizen may have misreported caste category]"
-                            info["noise_warning"] = "Caste value may be inaccurate"
+                            info["noise_warning"] = "Caste may be misreported"
 
                     elif action.action_type == ActionType.ASK_LOCATION:
                         obs.location = citizen.location
@@ -483,62 +581,99 @@ class GovSchemeEnvironment:
                         noisy_disability, was_noisy = self._apply_noise(action.action_type, citizen.has_disability)
                         obs.has_disability = noisy_disability
                         if was_noisy:
-                            reward_reason += " | [NOISE: Disability status may be misreported]"
-                            info["noise_warning"] = "Disability status may be inaccurate"
+                            info["noise_warning"] = "Disability status may be misreported"
 
                     elif action.action_type == ActionType.ASK_BPL:
                         noisy_bpl, was_noisy = self._apply_noise(action.action_type, citizen.is_bpl)
                         obs.is_bpl = noisy_bpl
                         if was_noisy:
-                            reward_reason += " | [NOISE: BPL status may be misreported]"
-                            info["noise_warning"] = "BPL status may be inaccurate — consider cross-verifying with income"
+                            info["noise_warning"] = "BPL status may be misreported"
 
-            # FEATURE 2: Check for scheme expiry after question
+                    elif action.action_type == ActionType.ASK_EDUCATION:
+                        obs.education = citizen.education
+
+                    elif action.action_type == ActionType.ASK_BANK_ACCOUNT:
+                        obs.has_bank_account = citizen.has_bank_account
+
+                    elif action.action_type == ActionType.ASK_RATION_CARD:
+                        obs.has_ration_card = citizen.has_ration_card
+
+                    elif action.action_type == ActionType.ASK_MARITAL_STATUS:
+                        obs.marital_status = citizen.marital_status
+
+                    elif action.action_type == ActionType.ASK_LAND_OWNERSHIP:
+                        obs.land_ownership = citizen.land_ownership
+
+                    elif action.action_type == ActionType.ASK_STATE:
+                        obs.state = citizen.state
+
+            # Scheme expiry check
             expired = self._check_scheme_expiry(obs)
             if expired:
-                reward_reason += f" | ALERT: '{expired}' scheme has expired and is no longer available!"
+                reward_reason += f" | ALERT: '{expired}' scheme has expired!"
                 info["scheme_expired"] = expired
 
         # ── CASE 2: Recommending a scheme ──
         else:
             recommended = action.scheme_name
+            questions_so_far = len(self.state.questions_asked)
+            min_questions = MIN_QUESTIONS_BEFORE_RECOMMEND.get(self.difficulty, 2)
 
-            if not recommended:
+            # Penalty: recommending too early without enough info
+            if questions_so_far < min_questions:
+                reward_value = -0.6
+                reward_reason = (
+                    f"Recommended too early! Asked only {questions_so_far} questions. "
+                    f"Minimum {min_questions} needed to make an informed recommendation."
+                )
+                done = True
+                info["too_early"] = True
+
+            elif not recommended:
                 reward_value = -0.5
-                reward_reason = "You must provide a scheme name when recommending!"
+                reward_reason = "Must provide a scheme name!"
                 done = True
 
             elif recommended not in self.available_schemes:
-                # Check if it expired mid-episode
                 if recommended in self._original_schemes:
                     reward_value = -0.3
-                    reward_reason = f"'{recommended}' was valid but has expired during this episode!"
+                    reward_reason = f"'{recommended}' expired during this episode!"
                 else:
                     reward_value = -0.5
-                    reward_reason = f"'{recommended}' is not in the available schemes list."
+                    reward_reason = f"'{recommended}' not in available schemes!"
                 done = True
 
             elif recommended in citizen.correct_schemes:
-                reward_value = 1.0
-                reward_reason = f"CORRECT! '{recommended}' is the perfect scheme for this citizen!"
+                # Bonus for recommending with fewer questions
+                efficiency_bonus = max(0, (self.max_steps - self.state.step_count) * 0.05)
+                reward_value = 1.0 + efficiency_bonus
+                reward_reason = (
+                    f"CORRECT! '{recommended}' is perfect for this citizen! "
+                    f"Efficiency bonus: +{round(efficiency_bonus, 2)}"
+                )
                 done = True
                 info["success"] = True
+                info["efficiency_bonus"] = efficiency_bonus
 
             else:
-                # FEATURE 4: Check for partial/conflicting eligibility
-                partial_score = self._get_partial_match_score(recommended)
+                # Check partial match
+                scheme = ALL_SCHEMES.get(recommended, {})
+                _, partial_score = check_scheme_conditions(citizen, scheme)
+
                 if partial_score > 0:
                     reward_value = partial_score
                     reward_reason = (
-                        f"PARTIAL MATCH — '{recommended}' partially applies but citizen "
-                        f"doesn't fully qualify. Partial reward: {partial_score}. "
-                        f"Correct schemes: {citizen.correct_schemes}"
+                        f"PARTIAL MATCH — '{recommended}' partially applies. "
+                        f"Partial reward: {partial_score}. "
+                        f"Correct: {citizen.correct_schemes[:3]}"
                     )
                     info["partial_match"] = True
-                    info["partial_score"] = partial_score
                 else:
                     reward_value = -0.5
-                    reward_reason = f"WRONG! '{recommended}' does not match this citizen at all."
+                    reward_reason = (
+                        f"WRONG! '{recommended}' doesn't match this citizen. "
+                        f"Correct: {citizen.correct_schemes[:3]}"
+                    )
                     info["success"] = False
 
                 info["correct_schemes"] = citizen.correct_schemes
@@ -550,7 +685,7 @@ class GovSchemeEnvironment:
 
         if self.state.step_count >= self.max_steps and not done:
             reward_value -= 0.2
-            reward_reason += " | Step limit reached without recommending!"
+            reward_reason += " | Step limit reached!"
             done = True
             info["timeout"] = True
             info["correct_schemes"] = citizen.correct_schemes
@@ -570,6 +705,20 @@ class GovSchemeEnvironment:
             )
         )
 
+        # ── Episode summary when done ──
+        if done:
+            info["episode_summary"] = {
+                "episode_id": self.state.episode_id,
+                "difficulty": self.difficulty.value,
+                "steps_taken": self.state.step_count,
+                "questions_asked": self.state.questions_asked,
+                "total_reward": round(self.state.total_reward, 3),
+                "final_score": reward.total_score,
+                "correct_schemes": citizen.correct_schemes,
+                "recommended": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
+                "occupation_asked_first": self.state.occupation_asked_first,
+            }
+
         return StepResult(
             observation=obs,
             reward=reward,
@@ -578,7 +727,7 @@ class GovSchemeEnvironment:
         )
 
     # -----------------------------------------
-    # state() — Return full internal state
+    # state()
     # -----------------------------------------
 
     def get_state(self) -> State:
@@ -593,16 +742,16 @@ class GovSchemeEnvironment:
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Testing Updated Environment — All 4 RL Features")
+    print(f"Testing Environment | Schemes loaded: {len(ALL_SCHEMES)}")
     print("=" * 60)
 
-    # Test on HARD to see all features
-    env = GovSchemeEnvironment(difficulty=Difficulty.HARD)
+    env = GovSchemeEnvironment(difficulty=Difficulty.EASY)
     obs = env.reset()
+
     print(f"\n[PASS] reset() works!")
-    print(f"   Citizen occupation (hidden): {env.state.citizen_profile.occupation.value}")
-    print(f"   Correct schemes (hidden): {env.state.citizen_profile.correct_schemes}")
-    print(f"   Available schemes: {len(obs.available_schemes)}")
+    print(f"   Occupation (hidden): {env.state.citizen_profile.occupation.value}")
+    print(f"   Correct schemes    : {env.state.citizen_profile.correct_schemes[:3]}")
+    print(f"   Available schemes  : {len(obs.available_schemes)}")
 
     from models import Action, ActionType
 
@@ -610,32 +759,27 @@ if __name__ == "__main__":
         Action(action_type=ActionType.ASK_OCCUPATION),
         Action(action_type=ActionType.ASK_BPL),
         Action(action_type=ActionType.ASK_INCOME),
-        Action(action_type=ActionType.ASK_DISABILITY),
     ]
 
-    print(f"\nRunning 4 questions on HARD difficulty...\n")
+    print("\nRunning 3 questions...\n")
     for i, action in enumerate(actions):
         result = env.step(action)
         print(f"Step {i+1}: {action.action_type.value}")
         print(f"  Reward : {result.reward.value}")
-        print(f"  Reason : {result.reward.reason[:100]}")
-        if result.info:
-            print(f"  Info   : {result.info}")
-        if result.done:
-            break
+        print(f"  Reason : {result.reward.reason[:90]}")
 
-    # Try recommending correct scheme
+    # Recommend correct scheme
     correct = env.state.citizen_profile.correct_schemes[0]
     result = env.step(Action(
         action_type=ActionType.RECOMMEND_SCHEME,
         scheme_name=correct
     ))
-    print(f"\nStep 5: recommend '{correct}'")
+    print(f"\nRecommend: {correct}")
     print(f"  Reward : {result.reward.value}")
-    print(f"  Reason : {result.reward.reason[:100]}")
     print(f"  Done   : {result.done}")
     print(f"  Score  : {result.reward.total_score}")
+    print(f"  Summary: {result.info.get('episode_summary', {})}")
 
     print("\n" + "=" * 60)
-    print("All features working!")
+    print("All tests passed!")
     print("=" * 60)

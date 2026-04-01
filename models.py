@@ -4,50 +4,49 @@ from enum import Enum
 
 
 # -----------------------------------------
-# ENUMS — Fixed choices for the environment
+# ENUMS
 # -----------------------------------------
 
 class ActionType(str, Enum):
-    ASK_AGE = "ask_age"
-    ASK_INCOME = "ask_income"           # Context-aware — means different things based on occupation
-    ASK_GENDER = "ask_gender"
-    ASK_CASTE = "ask_caste"
-    ASK_LOCATION = "ask_location"
-    ASK_OCCUPATION = "ask_occupation"   # Should always be asked FIRST
-    ASK_DISABILITY = "ask_disability"
-    ASK_BPL = "ask_bpl"
-    RECOMMEND_SCHEME = "recommend_scheme"
+    # Original questions
+    ASK_AGE             = "ask_age"
+    ASK_INCOME          = "ask_income"
+    ASK_GENDER          = "ask_gender"
+    ASK_CASTE           = "ask_caste"
+    ASK_LOCATION        = "ask_location"
+    ASK_OCCUPATION      = "ask_occupation"      # Always ask FIRST
+    ASK_DISABILITY      = "ask_disability"
+    ASK_BPL             = "ask_bpl"
+    # New questions
+    ASK_EDUCATION       = "ask_education"       # Education level
+    ASK_BANK_ACCOUNT    = "ask_bank_account"    # Has Jan Dhan / bank account?
+    ASK_RATION_CARD     = "ask_ration_card"     # Has ration card?
+    ASK_MARITAL_STATUS  = "ask_marital_status"  # Married/single/widowed?
+    ASK_LAND_OWNERSHIP  = "ask_land_ownership"  # Owns/rents/no land?
+    ASK_STATE           = "ask_state"           # Which state?
+    # Recommend
+    RECOMMEND_SCHEME    = "recommend_scheme"
 
 
 class IncomeContext(str, Enum):
-    """
-    Describes WHOSE income is being reported.
-    This changes automatically based on occupation:
-      - Student     -> parent's income
-      - Farmer      -> annual crop income
-      - Unemployed  -> household income
-      - Daily wage  -> monthly wage x 12
-      - Business    -> business income
-      - Govt job    -> personal salary
-    """
-    PERSONAL = "personal"
-    PARENTAL = "parental"
-    CROP = "crop"
-    HOUSEHOLD = "household"
-    NOT_APPLICABLE = "not_applicable"
+    PERSONAL        = "personal"
+    PARENTAL        = "parental"
+    CROP            = "crop"
+    HOUSEHOLD       = "household"
+    NOT_APPLICABLE  = "not_applicable"
 
 
 class Gender(str, Enum):
-    MALE = "male"
-    FEMALE = "female"
-    OTHER = "other"
+    MALE    = "male"
+    FEMALE  = "female"
+    OTHER   = "other"
 
 
 class CasteCategory(str, Enum):
     GENERAL = "general"
-    OBC = "obc"
-    SC = "sc"
-    ST = "st"
+    OBC     = "obc"
+    SC      = "sc"
+    ST      = "st"
 
 
 class Location(str, Enum):
@@ -56,22 +55,22 @@ class Location(str, Enum):
 
 
 class Occupation(str, Enum):
-    FARMER = "farmer"
-    STUDENT = "student"
-    DAILY_WAGE = "daily_wage"
-    SMALL_BUSINESS = "small_business"
-    UNEMPLOYED = "unemployed"
+    FARMER              = "farmer"
+    STUDENT             = "student"
+    DAILY_WAGE          = "daily_wage"
+    SMALL_BUSINESS      = "small_business"
+    UNEMPLOYED          = "unemployed"
     GOVERNMENT_EMPLOYEE = "government_employee"
 
 
 class Difficulty(str, Enum):
-    EASY = "easy"
+    EASY   = "easy"
     MEDIUM = "medium"
-    HARD = "hard"
+    HARD   = "hard"
 
 
 # -----------------------------------------
-# HELPER — Map occupation to income context
+# HELPERS
 # -----------------------------------------
 
 OCCUPATION_INCOME_CONTEXT = {
@@ -83,15 +82,12 @@ OCCUPATION_INCOME_CONTEXT = {
     Occupation.GOVERNMENT_EMPLOYEE: IncomeContext.PERSONAL,
 }
 
-# Penalty for asking income BEFORE occupation
 INCOME_BEFORE_OCCUPATION_PENALTY = -0.4
-
-# Bonus for asking occupation FIRST (smart maze navigation)
 OCCUPATION_FIRST_BONUS = 0.2
 
 
 # -----------------------------------------
-# ACTION — What the agent can do each step
+# ACTION
 # -----------------------------------------
 
 class Action(BaseModel):
@@ -101,48 +97,51 @@ class Action(BaseModel):
     )
     scheme_name: Optional[str] = Field(
         default=None,
-        description="Name of scheme to recommend. Only needed for RECOMMEND_SCHEME"
+        description="Scheme to recommend. Only needed for RECOMMEND_SCHEME"
     )
 
 
 # -----------------------------------------
-# OBSERVATION — What the agent sees
+# OBSERVATION — What agent sees
 # -----------------------------------------
 
 class Observation(BaseModel):
-    # Revealed one by one as agent asks questions
-    age: Optional[int] = Field(default=None, description="Citizen's age")
-    income: Optional[float] = Field(default=None, description="Income in rupees (context depends on occupation)")
-    income_context: Optional[IncomeContext] = Field(default=None, description="Whose income this is — revealed with income")
-    gender: Optional[Gender] = Field(default=None)
-    caste: Optional[CasteCategory] = Field(default=None)
-    location: Optional[Location] = Field(default=None)
-    occupation: Optional[Occupation] = Field(default=None)
-    has_disability: Optional[bool] = Field(default=None)
-    is_bpl: Optional[bool] = Field(default=None)
+    # Original fields
+    age: Optional[int]                      = Field(default=None)
+    income: Optional[float]                 = Field(default=None)
+    income_context: Optional[IncomeContext] = Field(default=None)
+    gender: Optional[Gender]                = Field(default=None)
+    caste: Optional[CasteCategory]          = Field(default=None)
+    location: Optional[Location]            = Field(default=None)
+    occupation: Optional[Occupation]        = Field(default=None)
+    has_disability: Optional[bool]          = Field(default=None)
+    is_bpl: Optional[bool]                  = Field(default=None)
+    income_hint: Optional[str]              = Field(default=None)
 
-    # Hint shown to agent when income asked before occupation
-    income_hint: Optional[str] = Field(
-        default=None,
-        description="Hint shown to agent when income is asked before occupation"
-    )
+    # New fields
+    education: Optional[str]               = Field(default=None, description="Education level")
+    has_bank_account: Optional[bool]        = Field(default=None)
+    has_ration_card: Optional[bool]         = Field(default=None)
+    marital_status: Optional[str]           = Field(default=None)
+    land_ownership: Optional[str]           = Field(default=None)
+    state: Optional[str]                    = Field(default=None, description="State of residence")
 
     # Episode progress
-    step_count: int = Field(default=0)
-    max_steps: int = Field(default=10)
-    last_action_result: Optional[str] = Field(default=None)
-    available_schemes: List[str] = Field(default_factory=list)
-    done: bool = Field(default=False)
+    step_count: int                         = Field(default=0)
+    max_steps: int                          = Field(default=10)
+    last_action_result: Optional[str]       = Field(default=None)
+    available_schemes: List[str]            = Field(default_factory=list)
+    done: bool                              = Field(default=False)
 
 
 # -----------------------------------------
-# REWARD — Score after each step
+# REWARD
 # -----------------------------------------
 
 class Reward(BaseModel):
-    value: float = Field(..., description="Reward for this step")
-    reason: str = Field(..., description="Why this reward was given")
-    total_score: float = Field(default=0.0, description="Running score 0.0 to 1.0")
+    value: float        = Field(..., description="Reward for this step")
+    reason: str         = Field(..., description="Why this reward was given")
+    total_score: float  = Field(default=0.0, description="Running score 0.0 to 1.0")
 
 
 # -----------------------------------------
@@ -150,7 +149,6 @@ class Reward(BaseModel):
 # -----------------------------------------
 
 class CitizenProfile(BaseModel):
-    """True citizen profile — agent cannot see this directly"""
     age: int
     income: float
     gender: Gender
@@ -159,14 +157,19 @@ class CitizenProfile(BaseModel):
     occupation: Occupation
     has_disability: bool
     is_bpl: bool
-    correct_schemes: List[str] = Field(description="Correct schemes for this citizen")
+    # New fields
+    has_bank_account: bool      = Field(default=True)
+    has_ration_card: bool       = Field(default=False)
+    marital_status: str         = Field(default="any")
+    land_ownership: str         = Field(default="any")
+    state: str                  = Field(default="any")
+    education: str              = Field(default="any")
+    correct_schemes: List[str]  = Field(default_factory=list)
 
     def income_context(self) -> IncomeContext:
-        """Returns the correct income context based on occupation"""
         return OCCUPATION_INCOME_CONTEXT.get(self.occupation, IncomeContext.PERSONAL)
 
     def income_label(self) -> str:
-        """Returns a human readable label for what income means for this citizen"""
         context = self.income_context()
         labels = {
             IncomeContext.PARENTAL:         "Parent's annual income",
@@ -179,7 +182,7 @@ class CitizenProfile(BaseModel):
 
 
 # -----------------------------------------
-# STATE — Full internal environment state
+# STATE
 # -----------------------------------------
 
 class State(BaseModel):
@@ -187,18 +190,15 @@ class State(BaseModel):
     observation: Observation
     difficulty: Difficulty
     episode_id: str
-    step_count: int = Field(default=0)
-    total_reward: float = Field(default=0.0)
-    is_done: bool = Field(default=False)
-    questions_asked: List[str] = Field(default_factory=list)
-    occupation_asked_first: bool = Field(
-        default=False,
-        description="Tracks if agent asked occupation before income"
-    )
+    step_count: int             = Field(default=0)
+    total_reward: float         = Field(default=0.0)
+    is_done: bool               = Field(default=False)
+    questions_asked: List[str]  = Field(default_factory=list)
+    occupation_asked_first: bool = Field(default=False)
 
 
 # -----------------------------------------
-# STEP RESULT — What step() returns
+# STEP RESULT
 # -----------------------------------------
 
 class StepResult(BaseModel):

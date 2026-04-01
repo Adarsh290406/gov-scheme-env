@@ -1,0 +1,13 @@
+name: "Gov Scheme Finder"
+version: "1.0.0"
+description: "An RL environment where agents must interview Indian citizens and match them with the optimal government scheme under constraints like incomplete information and step limits."
+tasks:
+  - name: "easy"
+    description: "Recommend a scheme for an obvious profile (rural BPL woman)."
+    metrics: ["score", "passed"]
+  - name: "medium"
+    description: "Recommend the highest priority scheme for a profile qualifying for multiple schemes."
+    metrics: ["score", "passed"]
+  - name: "hard"
+    description: "Strict 6-step limit to find the most targeted scheme for a complex profile (disabled SC student)."
+    metrics: ["score", "passed"]

@@ -60,15 +60,21 @@ You are an AI agent helping Indian citizens find the right government schemes.
 You interact with an environment using a strict JSON format.
 
 AVAILABLE ACTIONS:
-- ask_occupation   : Ask citizen's occupation (ask this FIRST always)
-- ask_income       : Ask citizen's income
-- ask_bpl          : Ask if citizen is Below Poverty Line
-- ask_location     : Ask if citizen is rural or urban
-- ask_gender       : Ask citizen's gender
-- ask_caste        : Ask citizen's caste category
-- ask_disability   : Ask if citizen has a disability
-- ask_age          : Ask citizen's age
-- recommend_scheme : Recommend a government scheme (ends episode)
+- ask_occupation     : Ask citizen's occupation (ask this FIRST always)
+- ask_income         : Ask citizen's income
+- ask_bpl            : Ask if citizen is Below Poverty Line
+- ask_location       : Ask if citizen is rural or urban
+- ask_gender         : Ask citizen's gender
+- ask_caste          : Ask citizen's caste category
+- ask_disability     : Ask if citizen has a disability
+- ask_age            : Ask citizen's age
+- ask_education      : Ask citizen's education level
+- ask_bank_account   : Ask if citizen has a bank account / Jan Dhan
+- ask_ration_card    : Ask if citizen has a ration card
+- ask_marital_status : Ask if citizen is married/single/widowed
+- ask_land_ownership : Ask if citizen owns land (important for farmers)
+- ask_state          : Ask citizen's state
+- recommend_scheme   : Recommend a government scheme (ends episode)
 
 RULES:
 1. Always ask occupation FIRST
@@ -83,7 +89,7 @@ For asking a question:
 {"action_type": "ask_occupation"}
 
 For recommending a scheme:
-{"action_type": "recommend_scheme", "scheme_name": "PM Ujjwala Yojana"}
+{"action_type": "recommend_scheme", "scheme_name": "Ujjwala Scheme"}
 """
 
 # -----------------------------------------
@@ -117,18 +123,26 @@ def run_agent(env, task_name: str, available_schemes: list) -> dict:
     step = 0
 
     while True:
-        # Get LLM response
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                temperature=0.1,   # Low temperature = more deterministic
-                max_tokens=100,
-            )
-            raw = response.choices[0].message.content.strip()
-
-        except Exception as e:
-            print(f"  API error: {e}")
+        import time
+        max_retries = 3
+        raw = None
+        for attempt in range(max_retries):
+            # Get LLM response
+            try:
+                response = client.chat.completions.create(
+                    model=MODEL,
+                    messages=messages,
+                    temperature=0.1,   # Low temperature = more deterministic
+                    max_tokens=100,
+                )
+                raw = response.choices[0].message.content.strip()
+                break
+            except Exception as e:
+                print(f"  API error (attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(3)
+        
+        if raw is None:
+            print("  Failed to get response after retries.")
             break
 
         # Parse JSON response

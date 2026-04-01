@@ -2,13 +2,13 @@
 TASK 1 — EASY
 =============
 Citizen Profile: Obvious, single correct scheme
-Schemes available: 5
+Schemes available: 10
 Max steps: 10
 Expected score for a smart agent: 0.7 to 1.0
 
 Scenario:
   A rural BPL woman who needs LPG connection.
-  The correct scheme is obviously PM Ujjwala Yojana.
+  The correct scheme is obviously PM Ujjwala Yojana (Ujjwala Scheme).
   Agent should figure this out in 3-4 questions.
 """
 
@@ -16,13 +16,11 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
 from models import (
     CitizenProfile, Gender, CasteCategory,
     Location, Occupation, Difficulty
 )
-from environment import GovSchemeEnvironment
-
+from environment import GovSchemeEnvironment, ALL_SCHEMES, check_scheme_conditions
 
 # -----------------------------------------
 # FIXED CITIZEN PROFILE
@@ -38,26 +36,35 @@ EASY_CITIZEN = CitizenProfile(
     occupation=Occupation.DAILY_WAGE,
     has_disability=False,
     is_bpl=True,
-    correct_schemes=["PM Ujjwala Yojana", "Ayushman Bharat", "MGNREGA"]
+    education="8th",
+    has_bank_account=True,
+    has_ration_card=True,
+    marital_status="married",
+    land_ownership="none",
+    state="Uttar Pradesh",
+    correct_schemes=[]
 )
+
+# Compute correct schemes dynamically for this citizen from ALL_SCHEMES
+for name, scheme in ALL_SCHEMES.items():
+    is_match, _ = check_scheme_conditions(EASY_CITIZEN, scheme)
+    if is_match:
+        EASY_CITIZEN.correct_schemes.append(name)
 
 TASK_DESCRIPTION = """
 TASK 1 (EASY) — Find the Right Scheme
 --------------------------------------
-A 32-year-old rural woman comes to you for help.
+A 32-year-old married rural woman comes to you for help.
 She is a daily wage worker living in a rural area.
 Her household income is Rs.85,000 per year.
-She belongs to OBC category and is registered as BPL.
+She belongs to OBC category, has an 8th pass education,
+and is registered as BPL with a bank account and ration card.
 
 Your job: Ask the right questions and recommend
 the most relevant government scheme for her.
 
-Available schemes: PM Ujjwala Yojana, PM Kisan Samman Nidhi,
-Ayushman Bharat, PM Scholarship Scheme, MGNREGA
-
 Hint: Think about what a rural BPL woman needs most.
 """
-
 
 # -----------------------------------------
 # GRADER — Scores agent 0.0 to 1.0
@@ -70,50 +77,40 @@ def grade(
     total_reward: float,
     max_steps: int = 10
 ) -> dict:
-    """
-    Grade the agent's performance on the easy task.
-
-    Scoring breakdown:
-      - Correct scheme found        : 0.0 to 0.5
-      - Efficiency (fewer steps)    : 0.0 to 0.3
-      - Question quality            : 0.0 to 0.2
-    """
-
     score = 0.0
     feedback = []
 
-    # ── 1. Scheme correctness (0.0 to 0.5) ──
+    # 1. Scheme correctness (0.0 to 0.5)
     if recommended_scheme in EASY_CITIZEN.correct_schemes:
-        if recommended_scheme == "PM Ujjwala Yojana":
-            scheme_score = 0.5      # Best match for this citizen
+        if recommended_scheme in ["Ujjwala Scheme", "Pradhan Mantri Ujjwala Yojana"]:
+            scheme_score = 0.5
             feedback.append("Perfect scheme choice — PM Ujjwala Yojana is the top priority.")
         else:
-            scheme_score = 0.35     # Correct but not the most relevant
-            feedback.append(f"Correct scheme but not the most relevant. Best: PM Ujjwala Yojana.")
+            scheme_score = 0.35
+            feedback.append(f"Correct scheme but not the most relevant. BPL woman -> Ujjwala Scheme.")
     else:
         scheme_score = 0.0
-        feedback.append(f"Wrong scheme. Correct options: {EASY_CITIZEN.correct_schemes}")
+        feedback.append(f"Wrong scheme. Valid schemes: {EASY_CITIZEN.correct_schemes[:5]}")
 
     score += scheme_score
 
-    # ── 2. Efficiency score (0.0 to 0.3) ──
-    # Agent should solve this in 4 steps or fewer
-    if steps_taken <= 3:
+    # 2. Efficiency score (0.0 to 0.3)
+    if steps_taken <= 4:
         efficiency_score = 0.3
-        feedback.append("Excellent efficiency — solved in 3 steps or fewer!")
-    elif steps_taken <= 5:
+        feedback.append("Excellent efficiency — solved in 4 steps or fewer!")
+    elif steps_taken <= 6:
         efficiency_score = 0.2
         feedback.append("Good efficiency.")
-    elif steps_taken <= 7:
+    elif steps_taken <= 8:
         efficiency_score = 0.1
-        feedback.append("Average efficiency — could ask fewer questions.")
+        feedback.append("Average efficiency.")
     else:
         efficiency_score = 0.0
         feedback.append("Poor efficiency — too many steps taken.")
 
     score += efficiency_score
 
-    # ── 3. Question quality (0.0 to 0.2) ──
+    # 3. Question quality (0.0 to 0.2)
     quality_score = 0.0
     key_questions = ["ask_occupation", "ask_bpl", "ask_gender", "ask_location"]
     asked_key = [q for q in questions_asked if q in key_questions]
@@ -130,8 +127,6 @@ def grade(
         feedback.append("Missed some key questions.")
 
     score += quality_score
-
-    # ── Clamp final score ──
     final_score = round(min(1.0, max(0.0, score)), 3)
 
     return {
@@ -149,72 +144,34 @@ def grade(
     }
 
 
-# -----------------------------------------
-# TASK RUNNER — Creates env with fixed citizen
-# -----------------------------------------
-
 def create_task_env() -> GovSchemeEnvironment:
-    """Create an easy difficulty environment"""
-    env = GovSchemeEnvironment(difficulty=Difficulty.EASY)
-    return env
-
+    return GovSchemeEnvironment(difficulty=Difficulty.EASY)
 
 def run_task_with_fixed_citizen() -> GovSchemeEnvironment:
-    """
-    Creates env and injects the fixed citizen profile.
-    Use this for deterministic grading.
-    """
     env = create_task_env()
     obs = env.reset()
-
-    # Override with fixed citizen
     env.state.citizen_profile = EASY_CITIZEN
+    
+    # Ensure Ujjwala is in the available schemes pool for the agent
+    if "Ujjwala Scheme" not in env.available_schemes:
+        if len(env.available_schemes) >= env.max_steps:
+            env.available_schemes.pop()
+        env.available_schemes.append("Ujjwala Scheme")
+        
     obs.available_schemes = env.available_schemes
-
     return env
 
-
-# -----------------------------------------
-# QUICK TEST
-# -----------------------------------------
-
 if __name__ == "__main__":
-    print("=" * 50)
-    print("TASK 1 — EASY")
-    print("=" * 50)
-    print(TASK_DESCRIPTION)
-
-    # Simulate a smart agent solving the easy task
-    env = run_task_with_fixed_citizen()
-
     from models import Action, ActionType
-
+    env = run_task_with_fixed_citizen()
     steps = [
         Action(action_type=ActionType.ASK_OCCUPATION),
         Action(action_type=ActionType.ASK_GENDER),
         Action(action_type=ActionType.ASK_BPL),
-        Action(action_type=ActionType.RECOMMEND_SCHEME, scheme_name="PM Ujjwala Yojana"),
+        Action(action_type=ActionType.RECOMMEND_SCHEME, scheme_name="Ujjwala Scheme"),
     ]
-
-    print("Simulating smart agent...\n")
-    for i, action in enumerate(steps):
-        result = env.step(action)
-        print(f"Step {i+1}: {action.action_type.value}")
-        print(f"  Reward : {result.reward.value}")
-        print(f"  Reason : {result.reward.reason[:80]}")
-        if result.done:
-            break
-
+    for action in steps:
+        env.step(action)
     state = env.get_state()
-    grade_result = grade(
-        recommended_scheme="PM Ujjwala Yojana",
-        questions_asked=state.questions_asked,
-        steps_taken=state.step_count,
-        total_reward=state.total_reward
-    )
-
-    print(f"\n--- GRADER RESULT ---")
-    print(f"Final Score : {grade_result['score']}")
-    print(f"Passed      : {grade_result['passed']}")
-    print(f"Feedback    : {grade_result['feedback']}")
-    print("=" * 50)
+    res = grade("Ujjwala Scheme", state.questions_asked, state.step_count, state.total_reward)
+    print(res)

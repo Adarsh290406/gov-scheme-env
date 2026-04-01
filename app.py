@@ -144,11 +144,15 @@ def info():
         "action_space": [
             "ask_age", "ask_income", "ask_gender", "ask_caste",
             "ask_location", "ask_occupation", "ask_disability",
-            "ask_bpl", "recommend_scheme"
+            "ask_bpl", "ask_education", "ask_bank_account",
+            "ask_ration_card", "ask_marital_status",
+            "ask_land_ownership", "ask_state", "recommend_scheme"
         ],
         "observation_space": [
             "age", "income", "income_context", "gender", "caste",
             "location", "occupation", "has_disability", "is_bpl",
+            "education", "has_bank_account", "has_ration_card",
+            "marital_status", "land_ownership", "state",
             "step_count", "max_steps", "last_action_result",
             "available_schemes", "done"
         ],

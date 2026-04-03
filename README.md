@@ -103,7 +103,8 @@ gov-scheme-env/
 ├── models.py           # Pydantic models
 ├── environment.py      # Core logic — reset(), step(), state()
 ├── app.py              # FastAPI server
-├── baseline.py         # LLM agent baseline script
+├── inference.py        # Hackathon inference script (API_BASE_URL, HF_TOKEN, MODEL_NAME)
+├── baseline.py         # Local baseline script (Groq)
 ├── generate_schemes.py # Auto-generates schemes.json
 ├── schemes.json        # 67 real Indian government schemes
 ├── Dockerfile          # HF Spaces deployment
@@ -125,25 +126,37 @@ cd gov-scheme-env
 pip install -r requirements.txt
 ```
 
-Create `.env`:
-```
-OPENAI_API_KEY=your_API_key_here
-```
-
 Run server:
 ```bash
 python app.py
 ```
 
-Run baseline:
+**Run baseline (local, uses Groq):**
+
+Create `.env`:
+```
+OPENAI_API_KEY=your_groq_key_here
+```
 ```bash
 python baseline.py
+```
+
+**Run inference script (hackathon, uses HF router):**
+
+Set environment variables:
+```
+API_BASE_URL=https://router.huggingface.co/v1
+MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+HF_TOKEN=your_hf_token_here
+```
+```bash
+python inference.py
 ```
 
 Docker:
 ```bash
 docker build -t gov-scheme-finder .
-docker run -p 8000:8000 --env-file .env gov-scheme-finder
+docker run -p 7860:7860 --env-file .env gov-scheme-finder
 ```
 
 ---

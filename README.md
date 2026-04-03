@@ -1,3 +1,11 @@
+---
+title: Gov Scheme Finder
+emoji: 🏛️
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
 # 🏛️ Gov Scheme Finder — OpenEnv Environment
 
 A real-world Reinforcement Learning environment where AI agents learn to match Indian citizens to the correct government schemes by asking smart questions.

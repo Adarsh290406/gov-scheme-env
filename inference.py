@@ -27,6 +27,7 @@ import os
 import sys
 import json
 import time
+import uuid
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -286,9 +287,11 @@ def _filter_by_observation(known: dict, available_schemes: list) -> list:
 
 # -----------------------------------------
 # AGENT RUNNER
+# ⚠️  ONE CHANGE from original:
+#     accepts episode_id and emits [STEP] logs
 # -----------------------------------------
 
-def run_agent(env, task_name: str, available_schemes: list) -> dict:
+def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
     print(f"\n  Running agent on {task_name} task...")
 
     max_q = MAX_QUESTIONS_PER_TASK[task_name]
@@ -408,9 +411,23 @@ def run_agent(env, task_name: str, available_schemes: list) -> dict:
         result = env.step(action)
         step += 1
 
+        # ── human-readable log (unchanged) ──
         print(f"  Step {step}: {action.action_type.value}"
               + (f" → '{action.scheme_name}'" if action.scheme_name else "")
               + f" | Reward: {result.reward.value:.3f}")
+
+        # ── [STEP] structured log — parsed by the evaluator ──
+        print(json.dumps({
+            "event":       "STEP",
+            "episode_id":  episode_id,
+            "task":        task_name,
+            "step":        step,
+            "action":      action.action_type.value,
+            "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
+            "reward":      round(result.reward.value, 4),
+            "reason":      result.reward.reason,
+            "done":        result.done,
+        }))
 
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
@@ -485,59 +502,55 @@ def main():
 
     results = {}
 
-    # ── TASK 1: EASY ──
-    print("\n[TASK 1] EASY")
-    print("-" * 40)
-    env          = easy_task()
-    available    = env.available_schemes
-    run_result   = run_agent(env, "easy", available)
-    state        = run_result["state"]
-    grade_result = easy_grade(
-        recommended_scheme=run_result["last_recommendation"],
-        questions_asked=state.questions_asked,
-        steps_taken=state.step_count,
-        total_reward=state.total_reward
-    )
-    results["easy"] = grade_result
-    print(f"\n  Score    : {grade_result['score']}")
-    print(f"  Passed   : {grade_result['passed']}")
-    print(f"  Feedback : {grade_result['feedback']}")
+    tasks = [
+        ("easy",   easy_task,   easy_grade),
+        ("medium", medium_task, medium_grade),
+        ("hard",   hard_task,   hard_grade),
+    ]
 
-    # ── TASK 2: MEDIUM ──
-    print("\n[TASK 2] MEDIUM")
-    print("-" * 40)
-    env          = medium_task()
-    available    = env.available_schemes
-    run_result   = run_agent(env, "medium", available)
-    state        = run_result["state"]
-    grade_result = medium_grade(
-        recommended_scheme=run_result["last_recommendation"],
-        questions_asked=state.questions_asked,
-        steps_taken=state.step_count,
-        total_reward=state.total_reward
-    )
-    results["medium"] = grade_result
-    print(f"\n  Score    : {grade_result['score']}")
-    print(f"  Passed   : {grade_result['passed']}")
-    print(f"  Feedback : {grade_result['feedback']}")
+    for task_name, task_fn, grade_fn in tasks:
+        print(f"\n[TASK] {task_name.upper()}")
+        print("-" * 40)
 
-    # ── TASK 3: HARD ──
-    print("\n[TASK 3] HARD")
-    print("-" * 40)
-    env          = hard_task()
-    available    = env.available_schemes
-    run_result   = run_agent(env, "hard", available)
-    state        = run_result["state"]
-    grade_result = hard_grade(
-        recommended_scheme=run_result["last_recommendation"],
-        questions_asked=state.questions_asked,
-        steps_taken=state.step_count,
-        total_reward=state.total_reward
-    )
-    results["hard"] = grade_result
-    print(f"\n  Score    : {grade_result['score']}")
-    print(f"  Passed   : {grade_result['passed']}")
-    print(f"  Feedback : {grade_result['feedback']}")
+        env          = task_fn()
+        available    = env.available_schemes
+        episode_id   = str(uuid.uuid4())
+
+        # ── [START] structured log ──
+        print(json.dumps({
+            "event":            "START",
+            "task":             task_name,
+            "episode_id":       episode_id,
+            "model":            MODEL,
+            "available_schemes": available,
+            "max_steps":        env.state.observation.max_steps,
+        }))
+
+        run_result   = run_agent(env, task_name, available, episode_id)
+        state        = run_result["state"]
+        grade_result = grade_fn(
+            recommended_scheme=run_result["last_recommendation"],
+            questions_asked=state.questions_asked,
+            steps_taken=state.step_count,
+            total_reward=state.total_reward
+        )
+        results[task_name] = grade_result
+
+        # ── [END] structured log ──
+        print(json.dumps({
+            "event":        "END",
+            "task":         task_name,
+            "episode_id":   episode_id,
+            "score":        grade_result["score"],
+            "passed":       grade_result["passed"],
+            "feedback":     grade_result["feedback"],
+            "steps_taken":  state.step_count,
+            "total_reward": round(state.total_reward, 4),
+        }))
+
+        print(f"\n  Score    : {grade_result['score']}")
+        print(f"  Passed   : {grade_result['passed']}")
+        print(f"  Feedback : {grade_result['feedback']}")
 
     # ── FINAL SUMMARY ──
     avg_score = round(

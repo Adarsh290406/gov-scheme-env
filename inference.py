@@ -34,6 +34,11 @@ from openai import OpenAI
 load_dotenv()
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+
+def log(*args, **kwargs):
+    """Write human-readable logs to stderr only — stdout reserved for structured JSON."""
+    print(*args, **kwargs, file=sys.stderr)
+
 from models import Action, ActionType, Difficulty
 from environment import ALL_SCHEMES, check_scheme_conditions
 from tasks.easy   import run_task_with_fixed_citizen as easy_task,   grade as easy_grade
@@ -292,7 +297,7 @@ def _filter_by_observation(known: dict, available_schemes: list) -> list:
 # -----------------------------------------
 
 def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
-    print(f"\n  Running agent on {task_name} task...")
+    log(f"\n  Running agent on {task_name} task...")
 
     max_q = MAX_QUESTIONS_PER_TASK[task_name]
     last_recommendation = ""
@@ -326,7 +331,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         # ── FORCE RECOMMEND if question budget exhausted ──
         if len(asked_questions) >= max_q:
             scheme = heuristic_recommendation(env, task_name, available_schemes)
-            print(f"  [Budget guard] Forcing recommendation: '{scheme}'")
+            log(f"  [Budget guard] Forcing recommendation: '{scheme}'")
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
             raw = json.dumps(action_data)
 
@@ -344,11 +349,11 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                     raw = response.choices[0].message.content.strip()
                     break
                 except Exception as e:
-                    print(f"  API error (attempt {attempt+1}/3): {e}")
+                    log(f"  API error (attempt {attempt+1}/3): {e}")
                     time.sleep(8)
 
             if raw is None:
-                print("  All retries failed — using heuristic.")
+                log("  All retries failed — using heuristic.")
                 scheme = heuristic_recommendation(env, task_name, available_schemes)
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
                 raw = json.dumps(action_data)
@@ -359,7 +364,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         clean = clean[clean.index("{"):clean.rindex("}")+1]
                     action_data = json.loads(clean)
                 except json.JSONDecodeError:
-                    print(f"  JSON parse failed: {raw!r} — using heuristic.")
+                    log(f"  JSON parse failed: {raw!r} — using heuristic.")
                     scheme = heuristic_recommendation(env, task_name, available_schemes)
                     action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
                     raw = json.dumps(action_data)
@@ -382,7 +387,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             fallback = next((a for a in priority_order if a not in asked_questions), None)
             if fallback:
                 action_data["action_type"] = fallback
-                print(f"  [Repeat guard] Redirecting to '{fallback}'")
+                log(f"  [Repeat guard] Redirecting to '{fallback}'")
             else:
                 scheme = heuristic_recommendation(env, task_name, available_schemes)
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
@@ -392,7 +397,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             proposed = action_data.get("scheme_name") or ""
             resolved = resolve_scheme_name(proposed, available_schemes)
             if not resolved:
-                print(f"  [Name fix] '{proposed}' not found — using heuristic.")
+                log(f"  [Name fix] '{proposed}' not found — using heuristic.")
                 resolved = heuristic_recommendation(env, task_name, available_schemes)
             action_data["scheme_name"] = resolved
 
@@ -401,7 +406,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             action = Action(**{k: v for k, v in action_data.items()
                                if k in ("action_type", "scheme_name")})
         except Exception as e:
-            print(f"  Invalid action: {e} — using heuristic.")
+            log(f"  Invalid action: {e} — using heuristic.")
             scheme = heuristic_recommendation(env, task_name, available_schemes)
             action = Action(action_type=ActionType.RECOMMEND_SCHEME, scheme_name=scheme)
 
@@ -411,8 +416,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         result = env.step(action)
         step += 1
 
-        # ── human-readable log (unchanged) ──
-        print(f"  Step {step}: {action.action_type.value}"
+        # ── human-readable log → stderr only ──
+        log(f"  Step {step}: {action.action_type.value}"
               + (f" → '{action.scheme_name}'" if action.scheme_name else "")
               + f" | Reward: {result.reward.value:.3f}")
 
@@ -494,11 +499,11 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
 # -----------------------------------------
 
 def main():
-    print("=" * 60)
-    print("Gov Scheme Finder — Inference Script")
-    print(f"Model    : {MODEL}")
-    print(f"Base URL : {API_BASE_URL}")
-    print("=" * 60)
+    log("=" * 60)
+    log("Gov Scheme Finder — Inference Script")
+    log(f"Model    : {MODEL}")
+    log(f"Base URL : {API_BASE_URL}")
+    log("=" * 60)
 
     results = {}
 
@@ -509,8 +514,8 @@ def main():
     ]
 
     for task_name, task_fn, grade_fn in tasks:
-        print(f"\n[TASK] {task_name.upper()}")
-        print("-" * 40)
+        log(f"\n[TASK] {task_name.upper()}")
+        log("-" * 40)
 
         env          = task_fn()
         available    = env.available_schemes
@@ -548,23 +553,23 @@ def main():
             "total_reward": round(state.total_reward, 4),
         }))
 
-        print(f"\n  Score    : {grade_result['score']}")
-        print(f"  Passed   : {grade_result['passed']}")
-        print(f"  Feedback : {grade_result['feedback']}")
+        log(f"\n  Score    : {grade_result['score']}")
+        log(f"  Passed   : {grade_result['passed']}")
+        log(f"  Feedback : {grade_result['feedback']}")
 
     # ── FINAL SUMMARY ──
     avg_score = round(
         sum(r["score"] for r in results.values()) / len(results), 3
     )
 
-    print("\n" + "=" * 60)
-    print("BASELINE RESULTS SUMMARY")
-    print("=" * 60)
-    print(f"  Task 1 (Easy)   : {results['easy']['score']}")
-    print(f"  Task 2 (Medium) : {results['medium']['score']}")
-    print(f"  Task 3 (Hard)   : {results['hard']['score']}")
-    print(f"  Average Score   : {avg_score}")
-    print("=" * 60)
+    log("\n" + "=" * 60)
+    log("BASELINE RESULTS SUMMARY")
+    log("=" * 60)
+    log(f"  Task 1 (Easy)   : {results['easy']['score']}")
+    log(f"  Task 2 (Medium) : {results['medium']['score']}")
+    log(f"  Task 3 (Hard)   : {results['hard']['score']}")
+    log(f"  Average Score   : {avg_score}")
+    log("=" * 60)
 
 
 if __name__ == "__main__":

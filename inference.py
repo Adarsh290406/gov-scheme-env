@@ -673,10 +673,11 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as _fatal:
-        # Emergency backstop — if main() itself crashes, still emit structured output
-        log(f"[FATAL] main() crashed: {_fatal}")
+        import uuid as _uuid
+        _m = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
         for _t in ["easy", "medium", "hard"]:
-            _ep = str(uuid.uuid4())
-            print(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{MODEL}"}}', flush=True)
-            print(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}', flush=True)
-            print(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}', flush=True)
+            _ep = str(_uuid.uuid4())
+            sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
+            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
+            sys.stdout.flush()

@@ -29,11 +29,19 @@ import json
 import time
 import uuid
 
-# Force stdout to be unbuffered immediately — before any other code
-sys.stdout.reconfigure(write_through=True)
+# Force stdout unbuffered — wrapped in case the stream doesn't support reconfigure
+try:
+    sys.stdout.reconfigure(write_through=True)
+except Exception:
+    pass
 
-from dotenv import load_dotenv
-load_dotenv()
+# dotenv is optional — env vars may be passed directly by the validator
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -565,22 +573,32 @@ def main():
             ("hard",   hard_task,   hard_grade),
         ]
 
-        for task_name, task_fn, grade_fn in tasks:
+        # Zip real tasks with fallback configs so [START] can always fire first
+        task_quads = [
+            ("easy",   easy_task,   easy_grade,   FALLBACK_TASKS[0]),
+            ("medium", medium_task, medium_grade, FALLBACK_TASKS[1]),
+            ("hard",   hard_task,   hard_grade,   FALLBACK_TASKS[2]),
+        ]
+
+        for task_name, task_fn, grade_fn, fallback_cfg in task_quads:
             log(f"\n[TASK] {task_name.upper()}")
             log("-" * 40)
 
+            episode_id = str(uuid.uuid4())
+            state      = None
+
+            # ── [START] printed BEFORE try block — always emitted ──
+            _start_data = {
+                "event": "START", "task": task_name, "episode_id": episode_id,
+                "model": MODEL,
+                "available_schemes": fallback_cfg["available_schemes"],
+                "max_steps": fallback_cfg["max_steps"],
+            }
+            print(f"[START] {json.dumps(_start_data)}", flush=True)
+
             try:
-                env        = task_fn()
-                available  = env.available_schemes
-                episode_id = str(uuid.uuid4())
-
-                _start_data = {
-                    "event": "START", "task": task_name, "episode_id": episode_id,
-                    "model": MODEL, "available_schemes": available,
-                    "max_steps": env.state.observation.max_steps,
-                }
-                print(f"[START] {json.dumps(_start_data)}", flush=True)
-
+                env       = task_fn()
+                available = env.available_schemes
                 run_result   = run_agent(env, task_name, available, episode_id)
                 state        = run_result["state"]
                 grade_result = grade_fn(
@@ -591,11 +609,9 @@ def main():
                 )
             except Exception as task_err:
                 log(f"  [ERROR] Task {task_name} failed: {task_err}")
-                episode_id   = episode_id if 'episode_id' in dir() else str(uuid.uuid4())
-                available    = available if 'available' in dir() else []
                 grade_result = {"score": 0.0, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
-                # emit a dummy STEP so validator sees all three token types
+                # guarantee [STEP] appears even on total failure
                 _step_data = {
                     "event": "STEP", "episode_id": episode_id, "task": task_name,
                     "step": 1, "action": "recommend_scheme", "scheme_name": "",
@@ -609,8 +625,8 @@ def main():
                 "event": "END", "task": task_name, "episode_id": episode_id,
                 "score": grade_result["score"], "passed": grade_result["passed"],
                 "feedback": grade_result["feedback"],
-                "steps_taken": getattr(state, 'step_count', 1) if 'state' in dir() else 1,
-                "total_reward": round(getattr(state, 'total_reward', 0.0) if 'state' in dir() else 0.0, 4),
+                "steps_taken": state.step_count if state else 1,
+                "total_reward": round(state.total_reward if state else 0.0, 4),
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
@@ -654,4 +670,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as _fatal:
+        # Emergency backstop — if main() itself crashes, still emit structured output
+        log(f"[FATAL] main() crashed: {_fatal}")
+        for _t in ["easy", "medium", "hard"]:
+            _ep = str(uuid.uuid4())
+            print(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{MODEL}"}}', flush=True)
+            print(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}', flush=True)
+            print(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}', flush=True)

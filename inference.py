@@ -422,7 +422,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
               + f" | Reward: {result.reward.value:.3f}")
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        print(json.dumps({
+        _step_data = {
             "event":       "STEP",
             "episode_id":  episode_id,
             "task":        task_name,
@@ -432,7 +432,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             "reward":      round(result.reward.value, 4),
             "reason":      result.reward.reason,
             "done":        result.done,
-        }))
+        }
+        print(f"[STEP] {json.dumps(_step_data)}", flush=True)
 
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
@@ -522,14 +523,15 @@ def main():
         episode_id   = str(uuid.uuid4())
 
         # ── [START] structured log ──
-        print(json.dumps({
+        _start_data = {
             "event":            "START",
             "task":             task_name,
             "episode_id":       episode_id,
             "model":            MODEL,
             "available_schemes": available,
             "max_steps":        env.state.observation.max_steps,
-        }))
+        }
+        print(f"[START] {json.dumps(_start_data)}", flush=True)
 
         run_result   = run_agent(env, task_name, available, episode_id)
         state        = run_result["state"]
@@ -542,7 +544,7 @@ def main():
         results[task_name] = grade_result
 
         # ── [END] structured log ──
-        print(json.dumps({
+        _end_data = {
             "event":        "END",
             "task":         task_name,
             "episode_id":   episode_id,
@@ -551,7 +553,8 @@ def main():
             "feedback":     grade_result["feedback"],
             "steps_taken":  state.step_count,
             "total_reward": round(state.total_reward, 4),
-        }))
+        }
+        print(f"[END] {json.dumps(_end_data)}", flush=True)
 
         log(f"\n  Score    : {grade_result['score']}")
         log(f"  Passed   : {grade_result['passed']}")

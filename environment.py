@@ -493,15 +493,15 @@ class GovSchemeEnvironment:
 
             # Penalty: repeated question
             if question in self.state.questions_asked:
-                reward_value = -0.3
+                reward_value = 0.0
                 reward_reason = f"Already asked '{question}'! Repeating wastes steps."
 
             # Penalty: income before occupation
             elif (action.action_type == ActionType.ASK_INCOME
                   and ActionType.ASK_OCCUPATION.value not in self.state.questions_asked):
-                reward_value = INCOME_BEFORE_OCCUPATION_PENALTY
+                reward_value = 0.0
                 reward_reason = (
-                    "Asked income before occupation! Context unknown. Penalty applied."
+                    "Asked income before occupation! Context unknown. No reward."
                 )
                 obs.income = citizen.income
                 obs.income_context = IncomeContext.NOT_APPLICABLE
@@ -513,7 +513,7 @@ class GovSchemeEnvironment:
                 irrelevance_penalty, irrelevance_reason = self._get_irrelevance_penalty(action.action_type)
 
                 if irrelevance_penalty < 0:
-                    reward_value = irrelevance_penalty
+                    reward_value = 0.0
                     reward_reason = irrelevance_reason
                     self.state.questions_asked.append(question)
 
@@ -621,7 +621,7 @@ class GovSchemeEnvironment:
 
             # Penalty: recommending too early without enough info
             if questions_so_far < min_questions:
-                reward_value = -0.6
+                reward_value = 0.0
                 reward_reason = (
                     f"Recommended too early! Asked only {questions_so_far} questions. "
                     f"Minimum {min_questions} needed to make an informed recommendation."
@@ -630,23 +630,23 @@ class GovSchemeEnvironment:
                 info["too_early"] = True
 
             elif not recommended:
-                reward_value = -0.5
+                reward_value = 0.0
                 reward_reason = "Must provide a scheme name!"
                 done = True
 
             elif recommended not in self.available_schemes:
                 if recommended in self._original_schemes:
-                    reward_value = -0.3
+                    reward_value = 0.0
                     reward_reason = f"'{recommended}' expired during this episode!"
                 else:
-                    reward_value = -0.5
+                    reward_value = 0.0
                     reward_reason = f"'{recommended}' not in available schemes!"
                 done = True
 
             elif recommended in citizen.correct_schemes:
-                # Bonus for recommending with fewer questions
-                efficiency_bonus = max(0, (self.max_steps - self.state.step_count) * 0.05)
-                reward_value = 1.0 + efficiency_bonus
+                # Efficiency bonus scales within [0.0, 1.0] ceiling
+                efficiency_bonus = min(0.3, max(0, (self.max_steps - self.state.step_count) * 0.05))
+                reward_value = min(1.0, 0.7 + efficiency_bonus)
                 reward_reason = (
                     f"CORRECT! '{recommended}' is perfect for this citizen! "
                     f"Efficiency bonus: +{round(efficiency_bonus, 2)}"
@@ -669,7 +669,7 @@ class GovSchemeEnvironment:
                     )
                     info["partial_match"] = True
                 else:
-                    reward_value = -0.5
+                    reward_value = 0.0
                     reward_reason = (
                         f"WRONG! '{recommended}' doesn't match this citizen. "
                         f"Correct: {citizen.correct_schemes[:3]}"
@@ -684,7 +684,7 @@ class GovSchemeEnvironment:
         obs.step_count = self.state.step_count
 
         if self.state.step_count >= self.max_steps and not done:
-            reward_value -= 0.2
+            reward_value = 0.0
             reward_reason += " | Step limit reached!"
             done = True
             info["timeout"] = True
@@ -696,8 +696,11 @@ class GovSchemeEnvironment:
         obs.done = done
         obs.last_action_result = reward_reason
 
+        # Hard clamp: reward is always in [0.0, 1.0]
+        reward_value = round(max(0.0, min(1.0, reward_value)), 3)
+
         reward = Reward(
-            value=round(reward_value, 3),
+            value=reward_value,
             reason=reward_reason,
             total_score=round(
                 max(0.0, min(1.0, self.state.total_reward / self.max_steps)),

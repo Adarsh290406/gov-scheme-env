@@ -138,7 +138,7 @@ Create `.env`:
 OPENAI_API_KEY=your_groq_key_here
 ```
 ```bash
-python baseline.py
+python inference.py
 ```
 
 **Run inference script (hackathon, uses HF router):**

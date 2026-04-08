@@ -676,13 +676,27 @@ if __name__ == "__main__":
     import http.server
     import socketserver
     import time
+    import json
+
+    class OpenEnvHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"OpenEnv Agent is Running and Healthy")
+
+        def do_POST(self):
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            response = {"status": "success", "message": "Environment Reset OK"}
+            self.wfile.write(json.dumps(response).encode())
 
     def keep_alive():
         port = 7860
-        handler = http.server.SimpleHTTPRequestHandler
         try:
-            with socketserver.TCPServer(("", port), handler) as httpd:
-                log(f"Serving background dummy UI at port {port}")
+            with socketserver.TCPServer(("", port), OpenEnvHandler) as httpd:
+                log(f"Serving and accepting POST/GET on port {port}")
                 httpd.serve_forever()
         except OSError:
             pass

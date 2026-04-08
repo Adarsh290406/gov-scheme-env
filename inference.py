@@ -289,11 +289,14 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         elif obs.is_bpl is None:
             ask_bpl
 
+        elif obs.is_bpl is None:
+            action_data = {"action_type": "ask_bpl", "scheme_name": None}
+
         elif obs.is_bpl:
             if not obs.has_ration_card:
-                ask_ration_card
+                action_data = {"action_type": "ask_ration_card", "scheme_name": None}
             else:
-                "recommend Ayushman Bharat"
+                action_data = {"action_type": "recommend_scheme", "scheme_name": "Ayushman Bharat"}
 
         else:
             action_data = {

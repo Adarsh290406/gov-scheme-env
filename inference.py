@@ -327,7 +327,7 @@ def _filter_by_observation(known: dict, available_schemes: list) -> list:
 #     accepts episode_id and emits [STEP] logs
 # -----------------------------------------
 
-def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
+def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
     log(f"\n  Running agent on {task_name} task...")
 
     max_q = MAX_QUESTIONS_PER_TASK[task_name]
@@ -425,6 +425,20 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             else:
                 scheme = heuristic_recommendation(env, task_name, available_schemes)
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
+
+        # ── BLOCK EARLY RECOMMENDATIONS ──
+        if action_data["action_type"] == "recommend_scheme" and len(asked_questions) < 3:
+            priority_order = [
+                "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
+                "ask_land_ownership", "ask_caste", "ask_income", "ask_location",
+                "ask_education", "ask_age", "ask_bank_account", "ask_ration_card",
+                "ask_marital_status", "ask_state"
+            ]
+            fallback = next((a for a in priority_order if a not in asked_questions), None)
+            if fallback:
+                action_data["action_type"] = fallback
+                action_data["scheme_name"] = None
+                log(f"  [Pacing guard] Forced extra question '{fallback}' to maintain rigid 4-step structure.")
 
         # ── VALIDATE SCHEME NAME ──
         if action_data["action_type"] == "recommend_scheme":

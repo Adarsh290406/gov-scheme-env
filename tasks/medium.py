@@ -122,9 +122,6 @@ def create_task_env():
 def run_task_with_fixed_citizen():
     env = create_task_env()
     obs = env.reset()
-    for name in TOP_PRIORITY:
-        if name not in MEDIUM_CITIZEN.correct_schemes:
-            MEDIUM_CITIZEN.correct_schemes.append(name)
     env.state.citizen_profile = MEDIUM_CITIZEN
     for scheme in ["PM Kisan Samman Nidhi", "Kisan Credit Card", "Fasal Bima Yojana"]:
         if scheme not in env.available_schemes and scheme in ALL_SCHEMES:

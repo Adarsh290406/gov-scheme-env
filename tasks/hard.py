@@ -123,9 +123,6 @@ def create_task_env():
 def run_task_with_fixed_citizen():
     env = create_task_env()
     obs = env.reset()
-    for name in TOP_PRIORITY:
-        if name not in HARD_CITIZEN.correct_schemes:
-            HARD_CITIZEN.correct_schemes.append(name)
     env.state.citizen_profile = HARD_CITIZEN
     obs.available_schemes = env.available_schemes
     return env

@@ -1,4 +1,3 @@
-import inference
 """
 app.py — FastAPI Server
 =======================

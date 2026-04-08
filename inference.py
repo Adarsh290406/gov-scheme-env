@@ -365,13 +365,13 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             if client is None:
                 log("  No LLM client available — using heuristic.")
             else:
-                for attempt in range(3):
+                for attempt in range(1):
                     try:
                         response = client.chat.completions.create(
                             model=MODEL,
                             messages=messages,
                             temperature=0.2,
-                            max_tokens=120,
+                            max_tokens=50,
                         )
                         raw = response.choices[0].message.content.strip()
                         break

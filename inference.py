@@ -377,8 +377,9 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         break
                     except Exception as e:
                         log(f"API error: {e}")
-                        raise e
-                        time.sleep(8)
+                        if "402" in str(e):
+                            log("CREDIT LIMIT REACHED: Please check Hugging Face Billing. Falling back to heuristics.")
+                        time.sleep(1)
 
             if raw is None:
                 log("  All retries failed — using heuristic.")

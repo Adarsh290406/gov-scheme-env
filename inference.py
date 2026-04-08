@@ -2,6 +2,7 @@ def run_task(task):
     step = 1
     total_reward = 0.0
 
+    print(f"[TASK] {task.upper()}")
     print(f"[START] task={task}")
 
     reward = 0.5

@@ -20,9 +20,9 @@ if hasattr(sys.stdout, 'reconfigure'):
         pass
 
 # Direct stdout write function - NO print() allowed for structured output
-def emit_stdout(message: str):
-    """Write directly to stdout, bypass all buffering."""
-    os.write(sys.stdout.fileno(), (message + '\n').encode('utf-8'))
+def emit(msg: str):
+    """Emit structured output to stdout only — validator parses this."""
+    print(msg, flush=True)
 
 # Stderr for debug only
 def emit_stderr(message: str):
@@ -30,10 +30,10 @@ def emit_stderr(message: str):
     os.write(sys.stderr.fileno(), (message + '\n').encode('utf-8'))
 
 # EMIT BOOT SEQUENCE IMMEDIATELY
-emit_stdout("[START] task=boot")
-emit_stdout("[STEP] step=1 reward=0.0")
-emit_stdout("[END] task=boot score=0.0 steps=1")
-emit_stdout("")
+emit("[START] task=boot")
+emit("[STEP] step=1 reward=0.0")
+emit("[END] task=boot score=0.0 steps=1")
+emit("")
 
 # ============================================================================
 # PHASE 1: IMPORTS AND SETUP
@@ -367,7 +367,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         emit_stderr(f"Step {step}: {action.action_type.value} | Reward: {result.reward.value:.3f}")
         
         # *** CRITICAL: Emit structured output to stdout ***
-        emit_stdout(f"[STEP] step={step} reward={round(result.reward.value, 4)}")
+        emit(f"[STEP] step={step} reward={round(result.reward.value, 4)}")
 
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
@@ -434,7 +434,7 @@ def main():
             emit_stderr(f"\n[TASK] {task_name.upper()}")
             
             # *** CRITICAL: Emit [START] to stdout ***
-            emit_stdout(f"[START] task={task_name}")
+            emit(f"[START] task={task_name}")
 
             episode_id = str(uuid.uuid4())
             state = None
@@ -453,14 +453,14 @@ def main():
             except Exception as task_err:
                 emit_stderr(f"Task {task_name} failed: {task_err}")
                 grade_result = {"score": 0.0, "passed": False}
-                emit_stdout(f"[STEP] step=1 reward=0.0")
+                emit(f"[STEP] step=1 reward=0.0")
 
             results[task_name] = grade_result
 
             _steps_taken = state.step_count if state else 1
             # *** CRITICAL: Emit [END] to stdout ***
-            emit_stdout(f"[END] task={task_name} score={grade_result['score']} steps={_steps_taken}")
-            emit_stdout("")
+            emit(f"[END] task={task_name} score={grade_result['score']} steps={_steps_taken}")
+            emit("")
 
             emit_stderr(f"Score: {grade_result['score']}")
 
@@ -471,17 +471,17 @@ def main():
         emit_stderr("[WARN] Running in fallback mode")
         for task_cfg in FALLBACK_TASKS:
             task_name = task_cfg["name"]
-            emit_stdout(f"[START] task={task_name}")
-            emit_stdout(f"[STEP] step=1 reward=0.5")
-            emit_stdout(f"[END] task={task_name} score=0.5 steps=1")
-            emit_stdout("")
+            emit(f"[START] task={task_name}")
+            emit(f"[STEP] step=1 reward=0.5")
+            emit(f"[END] task={task_name} score=0.5 steps=1")
+            emit("")
 
 try:
     main()
 except Exception as _fatal:
     emit_stderr(f"FATAL: {_fatal}")
     for _t in ["easy", "medium", "hard"]:
-        emit_stdout(f"[START] task={_t}")
-        emit_stdout(f"[STEP] step=1 reward=0.0")
-        emit_stdout(f"[END] task={_t} score=0.0 steps=1")
-        emit_stdout("")
+        emit(f"[START] task={_t}")
+        emit(f"[STEP] step=1 reward=0.0")
+        emit(f"[END] task={_t} score=0.0 steps=1")
+        emit("")

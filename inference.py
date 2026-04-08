@@ -371,7 +371,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                             model=MODEL,
                             messages=messages,
                             temperature=0.2,
-                            max_tokens=50,
+                            max_tokens=300,
                         )
                         raw = response.choices[0].message.content.strip()
                         break

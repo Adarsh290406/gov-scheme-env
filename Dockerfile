@@ -2,17 +2,18 @@ FROM python:3.10-slim-bookworm
 
 WORKDIR /app
 
-# Force stdout to be unbuffered so [START]/[STEP]/[END] lines are captured immediately
+# Unbuffered stdout (important for validator)
 ENV PYTHONUNBUFFERED=1
 
-# Install dependencies first for better caching
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
-# Copy application files
+# Copy all files
 COPY . .
 
+# Expose port (HF expects it, even if unused)
 EXPOSE 7860
 
-# Run inference script — produces [START]/[STEP]/[END] structured output on stdout
-CMD ["python", "-u", "inference.py"]
+# Run inference AND keep container alive so logs are captured
+CMD ["sh", "-c", "python -u inference.py && sleep 60"]

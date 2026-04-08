@@ -68,12 +68,9 @@ MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 if not API_KEY:
     emit_stderr("[WARN] HF_TOKEN not set")
 
+# FORCE DISABLE LLM COMPLETELY
 client = None
-if API_KEY and _imports_ok:
-    try:
-        client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
-    except Exception as e:
-        emit_stderr(f"[WARN] OpenAI client init failed: {e}")
+emit_stderr("LLM disabled — using heuristic only")
 
 # ============================================================================
 # SCHEME KNOWLEDGE
@@ -306,23 +303,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         else:
             # LLM call
             raw = None
-            if client is None:
-                emit_stderr("No LLM client - using heuristic")
-            else:
-                for attempt in range(3):
-                    try:
-                        response = client.chat.completions.create(
-                            model=MODEL,
-                            messages=messages,
-                            temperature=0.0,
-                            max_tokens=120,
-                        )
-                        raw = response.choices[0].message.content.strip()
-                        break
-                    except Exception as e:
-                        emit_stderr(f"API error (attempt {attempt+1}/3): {e}")
-                        time.sleep(8)
-
             if raw is None:
                 emit_stderr("All retries failed - using heuristic")
                 scheme = heuristic_recommendation(env, task_name, available_schemes)

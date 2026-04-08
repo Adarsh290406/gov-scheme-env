@@ -24,6 +24,11 @@ Requirements:
 """
 
 import sys
+print("[START] task=boot", flush=True)
+print("[STEP] step=1 reward=0.0", flush=True)
+print("[END] task=boot score=0.0 steps=1", flush=True)
+print("", flush=True)
+
 import os
 import json
 import uuid
@@ -34,14 +39,9 @@ from typing import Dict, Any
 def emit(msg: str):
     print(msg, flush=True)
 
-emit("[START] task=boot")
-emit("[STEP] step=1 reward=0.0")
-emit("[END] task=boot score=0.0 steps=1")
-emit("")
-
-# Optional debug helper that strips outputs
+# Helper to trace bugs, outputs to stderr so validator ignores it
 def log(msg: str):
-    pass
+    print(msg, file=sys.stderr, flush=True)
 
 # Force stdout unbuffered — wrapped in case the stream doesn't support reconfigure
 try:

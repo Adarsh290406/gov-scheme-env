@@ -376,7 +376,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         raw = response.choices[0].message.content.strip()
                         break
                     except Exception as e:
-                        log(f"  API error (attempt {attempt+1}/3): {e}")
+                        log(f"API error: {e}")
+                        raise e
                         time.sleep(8)
 
             if raw is None:

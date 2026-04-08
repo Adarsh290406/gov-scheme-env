@@ -683,3 +683,8 @@ if __name__ == "__main__":
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
             sys.stdout.flush()
+            
+    log("\nTesting complete. Keeping container alive...")
+    while True:
+        import time
+        time.sleep(100)

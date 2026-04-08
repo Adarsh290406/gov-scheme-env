@@ -272,9 +272,11 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         elif obs.occupation.value == "student":
             if not obs.caste:
                 action_data = {"action_type": "ask_caste", "scheme_name": None}
+            elif obs.caste.value in ("sc", "st"):
+                action_data = {"action_type": "recommend_scheme", "scheme_name": "SC ST Scholarship"}
             else:
                 action_data = {"action_type": "recommend_scheme", "scheme_name": "PM Scholarship Scheme"}
-
+        
         elif obs.has_disability is None:
             action_data = {"action_type": "ask_disability", "scheme_name": None}
 
@@ -284,8 +286,14 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         elif obs.is_bpl is None:
             action_data = {"action_type": "ask_bpl", "scheme_name": None}
 
+        elif obs.is_bpl is None:
+            ask_bpl
+
         elif obs.is_bpl:
-            action_data = {"action_type": "recommend_scheme", "scheme_name": "Ayushman Bharat"}
+            if not obs.has_ration_card:
+                ask_ration_card
+            else:
+                "recommend Ayushman Bharat"
 
         else:
             action_data = {
@@ -294,12 +302,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
             }
 
         raw = json.dumps(action_data)
-        # Force recommend if budget exhausted
-        if len(asked_questions) >= max_q:
-            scheme = heuristic_recommendation(env, task_name, available_schemes)
-            emit_stderr(f"Budget guard: recommending '{scheme}'")
-            action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
-            raw = json.dumps(action_data)
+
 
         # Validate action type
         if action_data.get("action_type") not in VALID_ACTIONS:
@@ -356,8 +359,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
         result = env.step(action)
         step += 1
 
-        emit_stderr(f"Step {step}: {action.action_type.value} | Reward: {result.reward.value:.3f}")
-        
         # *** CRITICAL: Emit structured output to stdout ***
         emit(f"[STEP] step={step} reward={round(result.reward.value, 4)}")
 

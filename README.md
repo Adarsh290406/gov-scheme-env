@@ -62,14 +62,14 @@ The agent starts blind. It must ask smart questions to reveal information, then 
 |------------------------------|-------------------------|
 | Ask occupation first         | +0.5 bonus              |
 | Ask relevant question        | +0.1 to +0.3            |
-| Ask irrelevant question      | -0.2                    |   
-| Ask income before occupation | -0.4                    |
-| Repeat a question            | -0.3                    |
-| Recommend too early          | -0.6                    |
-| Correct scheme               | +1.0 + efficiency bonus |
+| Ask irrelevant question      | 0.0 (no reward)         |   
+| Ask income before occupation | 0.0 (no reward)         |
+| Repeat a question            | 0.0 (no reward)         |
+| Recommend too early          | 0.0 (no reward)         |
+| Correct scheme               | +0.7 + efficiency bonus |
 | Partial match                | +0.15 to +0.3           |
-| Wrong scheme                 | -0.5                    |
-| Step limit reached           | -0.2                    |
+| Wrong scheme                 | 0.0 (no reward)         |
+| Step limit reached           | 0.0 (no reward)         |
 |------------------------------|-------------------------|
 **Reward decay per step** — forces agent to be decisive.
 

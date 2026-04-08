@@ -192,7 +192,7 @@ IRRELEVANT_QUESTIONS = {
 MIN_QUESTIONS_BEFORE_RECOMMEND = {
     Difficulty.EASY:   2,
     Difficulty.MEDIUM: 3,
-    Difficulty.HARD:   3,
+    Difficulty.HARD:   2,
 }
 
 # Reward decay per step — urgency increases

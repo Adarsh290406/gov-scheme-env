@@ -124,6 +124,15 @@ def get_env(session_id: str) -> GovSchemeEnvironment:
 # ENDPOINTS
 # -----------------------------------------
 
+@app.get("/")
+def read_root():
+    """Root endpoint so the Hugging Face space doesn't show Not Found."""
+    return {
+        "status": "ok",
+        "message": "Gov Scheme Finder API is running. Check /info for details."
+    }
+
+
 @app.get("/health")
 def health():
     """Check if the server is running"""

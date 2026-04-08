@@ -672,6 +672,23 @@ def main():
 
 
 if __name__ == "__main__":
+    import threading
+    import http.server
+    import socketserver
+    import time
+
+    def keep_alive():
+        port = 7860
+        handler = http.server.SimpleHTTPRequestHandler
+        try:
+            with socketserver.TCPServer(("", port), handler) as httpd:
+                log(f"Serving background dummy UI at port {port}")
+                httpd.serve_forever()
+        except OSError:
+            pass
+
+    threading.Thread(target=keep_alive, daemon=True).start()
+
     try:
         main()
     except Exception as _fatal:
@@ -684,7 +701,6 @@ if __name__ == "__main__":
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
             sys.stdout.flush()
             
-    log("\nTesting complete. Keeping container alive...")
+    log("\nTesting complete. Container is now staying alive for submission.")
     while True:
-        import time
         time.sleep(100)

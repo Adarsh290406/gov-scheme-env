@@ -300,25 +300,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
             emit_stderr(f"Budget guard: recommending '{scheme}'")
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
             raw = json.dumps(action_data)
-        else:
-            # LLM call
-            raw = None
-            if raw is None:
-                emit_stderr("All retries failed - using heuristic")
-                scheme = heuristic_recommendation(env, task_name, available_schemes)
-                action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
-                raw = json.dumps(action_data)
-            else:
-                try:
-                    clean = raw
-                    if "{" in clean and "}" in clean:
-                        clean = clean[clean.index("{"):clean.rindex("}")+1]
-                    action_data = json.loads(clean)
-                except json.JSONDecodeError:
-                    emit_stderr(f"JSON parse failed: {raw!r}")
-                    scheme = heuristic_recommendation(env, task_name, available_schemes)
-                    action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
-                    raw = json.dumps(action_data)
 
         # Validate action type
         if action_data.get("action_type") not in VALID_ACTIONS:

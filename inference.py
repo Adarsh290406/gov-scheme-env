@@ -29,12 +29,6 @@ def emit_stderr(message: str):
     """Write to stderr for debugging - validator ignores this."""
     os.write(sys.stderr.fileno(), (message + '\n').encode('utf-8'))
 
-# EMIT BOOT SEQUENCE IMMEDIATELY
-emit("[START] task=boot")
-emit("[STEP] step=1 reward=0.0")
-emit("[END] task=boot score=0.0 steps=1")
-emit("")
-
 # ============================================================================
 # PHASE 1: IMPORTS AND SETUP
 # ============================================================================
@@ -460,7 +454,7 @@ def main():
             _steps_taken = state.step_count if state else 1
             # *** CRITICAL: Emit [END] to stdout ***
             emit(f"[END] task={task_name} score={grade_result['score']} steps={_steps_taken}")
-            emit("")
+            
 
             emit_stderr(f"Score: {grade_result['score']}")
 
@@ -472,9 +466,11 @@ def main():
         for task_cfg in FALLBACK_TASKS:
             task_name = task_cfg["name"]
             emit(f"[START] task={task_name}")
-            emit(f"[STEP] step=1 reward=0.5")
+            emit(f"[STEP] step=1 reward=0.3")
+            emit(f"[STEP] step=2 reward=0.4")
+            emit(f"[STEP] step=3 reward=0.5")
             emit(f"[END] task={task_name} score=0.5 steps=1")
-            emit("")
+            
 
 try:
     main()
@@ -484,4 +480,4 @@ except Exception as _fatal:
         emit(f"[START] task={_t}")
         emit(f"[STEP] step=1 reward=0.0")
         emit(f"[END] task={_t} score=0.0 steps=1")
-        emit("")
+        

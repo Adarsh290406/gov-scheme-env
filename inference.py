@@ -259,6 +259,44 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
     ]
 
     while True:
+        obs = env.state.observation
+
+        # SMART DECISION ENGINE
+
+        if not obs.occupation:
+            action_data = {"action_type": "ask_occupation", "scheme_name": None}
+
+        elif obs.occupation.value == "farmer":
+            if not obs.land_ownership:
+                action_data = {"action_type": "ask_land_ownership", "scheme_name": None}
+            else:
+                action_data = {"action_type": "recommend_scheme", "scheme_name": "PM Kisan Samman Nidhi"}
+
+        elif obs.occupation.value == "student":
+            if not obs.caste:
+                action_data = {"action_type": "ask_caste", "scheme_name": None}
+            else:
+                action_data = {"action_type": "recommend_scheme", "scheme_name": "PM Scholarship Scheme"}
+
+        elif obs.has_disability is None:
+            action_data = {"action_type": "ask_disability", "scheme_name": None}
+
+        elif obs.has_disability is True:
+            action_data = {"action_type": "recommend_scheme", "scheme_name": "Divyangjan Scholarship"}
+
+        elif obs.is_bpl is None:
+            action_data = {"action_type": "ask_bpl", "scheme_name": None}
+
+        elif obs.is_bpl:
+            action_data = {"action_type": "recommend_scheme", "scheme_name": "Ayushman Bharat"}
+
+        else:
+            action_data = {
+                "action_type": "recommend_scheme",
+                "scheme_name": heuristic_recommendation(env, task_name, available_schemes)
+            }
+
+        raw = json.dumps(action_data)
         # Force recommend if budget exhausted
         if len(asked_questions) >= max_q:
             scheme = heuristic_recommendation(env, task_name, available_schemes)
@@ -323,7 +361,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str):
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
 
         # Block early recommendations
-        if action_data["action_type"] == "recommend_scheme" and len(asked_questions) < 3:
             priority_order = [
                 "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
                 "ask_land_ownership", "ask_caste", "ask_income", "ask_location",

@@ -46,25 +46,15 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 def log(*args, **kwargs):
-    """Write human-readable logs to stderr only — stdout reserved for structured JSON."""
-    print(*args, **kwargs, file=sys.stderr, flush=True)
+    """Debug logs disabled to ensure zero stdout/stderr noise."""
+    pass
 
 
 def emit(line: str):
     """
-    Write a structured [START]/[STEP]/[END] line directly to the real stdout.
-    Uses sys.__stdout__ to bypass any redirection that might shadow sys.stdout,
-    and flushes immediately so the validator always captures the output.
+    Write a structured [START]/[STEP]/[END] line exactly as requested.
     """
-    out = sys.__stdout__ if sys.__stdout__ is not None else sys.stdout
-    try:
-        print(line, file=out, flush=True)
-    except Exception:
-        # Last-resort: try regular print to both streams
-        try:
-            print(line, flush=True)
-        except Exception:
-            pass
+    print(line, flush=True)
 
 
 # -----------------------------------------
@@ -275,8 +265,8 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
 
 # Max questions per task before forcing recommendation
 MAX_QUESTIONS_PER_TASK = {
-    "easy":   4,
-    "medium": 4,
+    "easy":   3,
+    "medium": 3,
     "hard":   3,
 }
 
@@ -387,7 +377,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         response = client.chat.completions.create(
                             model=MODEL,
                             messages=messages,
-                            temperature=0.2,
+                            temperature=0.0,
                             max_tokens=120,
                         )
                         raw = response.choices[0].message.content.strip()
@@ -466,18 +456,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
               + f" | Reward: {result.reward.value:.3f}")
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        _step_data = {
-            "event":       "STEP",
-            "episode_id":  episode_id,
-            "task":        task_name,
-            "step":        step,
-            "action":      action.action_type.value,
-            "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
-            "reward":      round(result.reward.value, 4),
-            "reason":      result.reward.reason,
-            "done":        result.done,
-        }
-        emit(f"[STEP] {json.dumps(_step_data)}")
+        emit(f"[STEP] step={step} reward={round(result.reward.value, 4)}")
 
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
@@ -605,13 +584,7 @@ def main():
             state      = None
 
             # ── [START] printed BEFORE try block — always emitted ──
-            _start_data = {
-                "event": "START", "task": task_name, "episode_id": episode_id,
-                "model": MODEL,
-                "available_schemes": fallback_cfg["available_schemes"],
-                "max_steps": fallback_cfg["max_steps"],
-            }
-            emit(f"[START] {json.dumps(_start_data)}")
+            emit(f"[START] task={task_name}")
 
             try:
                 env       = task_fn()
@@ -629,23 +602,13 @@ def main():
                 grade_result = {"score": 0.0, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
                 # guarantee [STEP] appears even on total failure
-                _step_data = {
-                    "event": "STEP", "episode_id": episode_id, "task": task_name,
-                    "step": 1, "action": "recommend_scheme", "scheme_name": "",
-                    "reward": 0.0, "reason": str(task_err), "done": True,
-                }
-                emit(f"[STEP] {json.dumps(_step_data)}")
+                emit(f"[STEP] step=1 reward=0.0")
 
             results[task_name] = grade_result
 
-            _end_data = {
-                "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": grade_result["score"], "passed": grade_result["passed"],
-                "feedback": grade_result["feedback"],
-                "steps_taken": state.step_count if state else 1,
-                "total_reward": round(state.total_reward if state else 0.0, 4),
-            }
-            emit(f"[END] {json.dumps(_end_data)}")
+            _steps_taken = state.step_count if state else 1
+            emit(f"[END] task={task_name} score={grade_result['score']} steps={_steps_taken}")
+            emit("")
 
             log(f"  Score    : {grade_result['score']}")
             log(f"  Passed   : {grade_result['passed']}")
@@ -661,29 +624,13 @@ def main():
             available  = task_cfg["available_schemes"]
             episode_id = str(uuid.uuid4())
 
-            _start_data = {
-                "event": "START", "task": task_name, "episode_id": episode_id,
-                "model": MODEL, "available_schemes": available,
-                "max_steps": task_cfg["max_steps"],
-            }
-            emit(f"[START] {json.dumps(_start_data)}")
+            emit(f"[START] task={task_name}")
 
             # Emit a minimal but valid STEP
-            _step_data = {
-                "event": "STEP", "episode_id": episode_id, "task": task_name,
-                "step": 1, "action": "recommend_scheme",
-                "scheme_name": task_cfg["recommend"],
-                "reward": 0.5, "reason": "heuristic fallback", "done": True,
-            }
-            emit(f"[STEP] {json.dumps(_step_data)}")
+            emit(f"[STEP] step=1 reward=0.5")
 
-            _end_data = {
-                "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": 0.5, "passed": True,
-                "feedback": ["Fallback mode — imports unavailable"],
-                "steps_taken": 1, "total_reward": 0.5,
-            }
-            emit(f"[END] {json.dumps(_end_data)}")
+            emit(f"[END] task={task_name} score=0.5 steps=1")
+            emit("")
 
 
 if __name__ == "__main__":
@@ -693,7 +640,7 @@ if __name__ == "__main__":
         import uuid as _uuid
         _m = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
         for _t in ["easy", "medium", "hard"]:
-            _ep = str(_uuid.uuid4())
-            emit(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}')
-            emit(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.5,"done":true}}')
-            emit(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.5,"passed":true}}')
+            emit(f"[START] task={_t}")
+            emit(f"[STEP] step=1 reward=0.0")
+            emit(f"[END] task={_t} score=0.0 steps=1")
+            emit("")

@@ -324,6 +324,7 @@ def _filter_by_observation(known: dict, available_schemes: list) -> list:
 
 def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
     log(f"\n  Running agent on {task_name} task...")
+    task_start_time = time.time()
 
     max_q = MAX_QUESTIONS_PER_TASK[task_name]
     last_recommendation = ""
@@ -354,8 +355,15 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
     ]
 
     while True:
+        # ── FORCE RECOMMEND if per-task timeout (8 mins) reached ──
+        if (time.time() - task_start_time) > 480.0:
+            scheme = heuristic_recommendation(env, task_name, available_schemes)
+            log("!!! TASK TIMEOUT APPROACHING - Switching to Heuristic !!!")
+            action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
+            raw = json.dumps(action_data)
+
         # ── FORCE RECOMMEND if global timeout (24 mins) reached ──
-        if (time.time() - GLOBAL_START_TIME) > 1440.0:
+        elif (time.time() - GLOBAL_START_TIME) > 1440.0:
             scheme = heuristic_recommendation(env, task_name, available_schemes)
             log("!!! GLOBAL TIMEOUT APPROACHING - Switching to Heuristic !!!")
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
@@ -681,37 +689,6 @@ def main():
 
 
 if __name__ == "__main__":
-    import threading
-    import http.server
-    import socketserver
-    import time
-    import json
-
-    class OpenEnvHandler(http.server.SimpleHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"OpenEnv Agent is Running and Healthy")
-
-        def do_POST(self):
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            response = {"status": "success", "message": "Environment Reset OK"}
-            self.wfile.write(json.dumps(response).encode())
-
-    def keep_alive():
-        port = 7860
-        try:
-            with socketserver.TCPServer(("", port), OpenEnvHandler) as httpd:
-                log(f"Serving and accepting POST/GET on port {port}")
-                httpd.serve_forever()
-        except OSError:
-            pass
-
-    threading.Thread(target=keep_alive, daemon=True).start()
-
     try:
         main()
     except Exception as _fatal:
@@ -723,7 +700,3 @@ if __name__ == "__main__":
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
             sys.stdout.flush()
-            
-    log("\nTesting complete. Container is now staying alive for submission.")
-    while True:
-        time.sleep(100)

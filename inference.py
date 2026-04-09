@@ -319,6 +319,7 @@ def _filter_by_observation(known: dict, available_schemes: list) -> list:
 # -----------------------------------------
 
 def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
+    global client
     log(f"\n  Running agent on {task_name} task...")
     task_start_time = time.time()
 

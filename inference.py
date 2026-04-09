@@ -82,9 +82,17 @@ MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 if not API_KEY:
     log("[WARN] HF_TOKEN not set — will use heuristic fallback (no LLM calls).")
 
-# Create OpenAI client safely
-# FORCED FALLBACK: Client permanently set to None to bypass 402 API limits
+# Create OpenAI client safely using Scaler's injected environment variables
 client = None
+if API_KEY and API_BASE_URL:
+    try:
+        client = OpenAI(
+            base_url=API_BASE_URL,
+            api_key=API_KEY
+        )
+        log(f"[INFO] OpenAI client initialized with Base URL: {API_BASE_URL}")
+    except Exception as e:
+        log(f"[ERROR] Failed to initialize OpenAI client: {e}")
 
 
 # -----------------------------------------
@@ -396,9 +404,9 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         break
                     except Exception as e:
                         log(f"API error: {e}")
-                        if "402" in str(e):
-                            log("CREDIT LIMIT REACHED: Please check Hugging Face Billing. Falling back to heuristics.")
-                            client = None
+                        if "402" in str(e) or "429" in str(e):
+                            log("API Limit/Proxy Issue. Falling back to heuristics for this session.")
+                            raw = None 
                             break
 
             if raw is None:

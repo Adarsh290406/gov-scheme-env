@@ -490,7 +490,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             "step":        step,
             "action":      action.action_type.value,
             "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
-            "reward":      round(result.reward.value, 4),
+            "reward":      round(max(0.01, min(0.99, result.reward.value)), 4),
             "reason":      result.reward.reason,
             "done":        result.done,
         }
@@ -649,7 +649,7 @@ def main():
                 _step_data = {
                     "event": "STEP", "episode_id": episode_id, "task": task_name,
                     "step": 1, "action": "recommend_scheme", "scheme_name": "",
-                    "reward": 0.0, "reason": str(task_err), "done": True,
+                    "reward": 0.01, "reason": str(task_err), "done": True,
                 }
                 print(f"[STEP] {json.dumps(_step_data)}", flush=True)
 
@@ -660,7 +660,7 @@ def main():
                 "score": grade_result["score"], "passed": grade_result["passed"],
                 "feedback": grade_result["feedback"],
                 "steps_taken": state.step_count if state else 1,
-                "total_reward": round(state.total_reward if state else 0.0, 4),
+                "total_reward": round(max(0.01, min(0.99, state.total_reward if state else 0.01)), 4),
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 

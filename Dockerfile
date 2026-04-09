@@ -15,5 +15,5 @@ COPY . .
 # Hugging Face expects port 7860
 EXPOSE 7860
 
-# Run inference script — produces [START]/[STEP]/[END] structured output on stdout
-CMD ["python", "-u", "inference.py"]
+# Run inference, then start a dummy server to keep the container 'Green'
+CMD python -u inference.py && python -m http.server 7860

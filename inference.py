@@ -76,7 +76,7 @@ except Exception as _import_err:
 # -----------------------------------------
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or ""
+API_KEY      = os.getenv("API_KEY") or os.getenv("HF_TOKEN") or ""
 MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 
 if not API_KEY:

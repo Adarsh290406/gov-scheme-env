@@ -260,8 +260,8 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
 
 # Max questions per task before forcing recommendation
 MAX_QUESTIONS_PER_TASK = {
-    "easy":   4,
-    "medium": 4,
+    "easy":   2,
+    "medium": 3,
     "hard":   3,
 }
 
@@ -354,10 +354,10 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
     ]
 
     while True:
-        # ── FORCE RECOMMEND if global timeout (25 mins) reached ──
-        if (time.time() - GLOBAL_START_TIME) > (25.0 * 60.0):
+        # ── FORCE RECOMMEND if global timeout (24 mins) reached ──
+        if (time.time() - GLOBAL_START_TIME) > 1440.0:
             scheme = heuristic_recommendation(env, task_name, available_schemes)
-            log(f"  [Global Timeout] Forcing recommendation: '{scheme}'")
+            log("!!! GLOBAL TIMEOUT APPROACHING - Switching to Heuristic !!!")
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
             raw = json.dumps(action_data)
             
@@ -379,9 +379,9 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         response = client.chat.completions.create(
                             model=MODEL,
                             messages=messages,
-                            temperature=0.2,
-                            max_tokens=100,
-                            timeout=15.0,
+                            temperature=0.1,
+                            max_tokens=64,
+                            timeout=7.0,
                         )
                         raw = response.choices[0].message.content.strip()
                         break
@@ -524,8 +524,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": next_msg})
 
-        if len(messages) > 8:
-            messages = messages[:2] + messages[-6:]
+        if len(messages) > 5:
+            messages = [messages[0], messages[1]] + messages[-3:]
 
     return {
         "last_recommendation": last_recommendation,

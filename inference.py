@@ -82,17 +82,9 @@ MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 if not API_KEY:
     log("[WARN] HF_TOKEN not set — will use heuristic fallback (no LLM calls).")
 
-# Create OpenAI client safely using Scaler's injected environment variables
-client = None
-if API_KEY and API_BASE_URL:
-    try:
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=API_KEY
-        )
-        log(f"[INFO] OpenAI client initialized with Base URL: {API_BASE_URL}")
-    except Exception as e:
-        log(f"[ERROR] Failed to initialize OpenAI client: {e}")
+# Use the validator's injected variables
+# DO NOT set client = None here
+client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 
 # -----------------------------------------

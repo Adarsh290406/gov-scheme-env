@@ -15,5 +15,5 @@ COPY . .
 # Hugging Face expects port 7860
 EXPOSE 7860
 
-# Run inference, then start a dummy server to keep the container 'Green'
-CMD python -u inference.py && python -m http.server 7860
+# Change the last line of your Dockerfile to this:
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

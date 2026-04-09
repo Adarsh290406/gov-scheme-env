@@ -103,7 +103,7 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
         qual += 0.05
     score += qual
 
-    final = round(min(1.0, max(0.0, score)), 3)
+    final = round(min(0.99, max(0.01, score)), 3)
     return {
         "task": "hard", "score": final,
         "scheme_score": scheme_score, "priority_score": pri,

@@ -643,7 +643,7 @@ def main():
                 )
             except Exception as task_err:
                 log(f"  [ERROR] Task {task_name} failed: {task_err}")
-                grade_result = {"score": 0.0, "passed": False,
+                grade_result = {"score": 0.01, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
                 # guarantee [STEP] appears even on total failure
                 _step_data = {
@@ -716,8 +716,8 @@ if __name__ == "__main__":
         for _t in ["easy", "medium", "hard"]:
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
-            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
+            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.01,"done":true}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.01,"passed":false}}\n')
             sys.stdout.flush()
     finally:
         os._exit(0)

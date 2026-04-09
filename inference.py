@@ -393,6 +393,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         log(f"API error: {e}")
                         if "402" in str(e):
                             log("CREDIT LIMIT REACHED: Please check Hugging Face Billing. Falling back to heuristics.")
+                            client = None
+                            break
 
             if raw is None:
                 log("  All retries failed — using heuristic.")
@@ -695,11 +697,14 @@ def main():
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
+    sys.exit(0)
+
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as _fatal:
+        log(f"FATAL ERROR: {_fatal}")
         import uuid as _uuid
         _m = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
         for _t in ["easy", "medium", "hard"]:
@@ -708,5 +713,5 @@ if __name__ == "__main__":
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
             sys.stdout.flush()
-
-    sys.exit(0)
+    finally:
+        os._exit(0)

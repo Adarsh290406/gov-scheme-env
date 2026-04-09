@@ -29,6 +29,8 @@ import json
 import time
 import uuid
 
+GLOBAL_START_TIME = time.time()
+
 # Force stdout unbuffered — wrapped in case the stream doesn't support reconfigure
 try:
     sys.stdout.reconfigure(write_through=True)
@@ -352,8 +354,15 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
     ]
 
     while True:
+        # ── FORCE RECOMMEND if global timeout (25 mins) reached ──
+        if (time.time() - GLOBAL_START_TIME) > (25.0 * 60.0):
+            scheme = heuristic_recommendation(env, task_name, available_schemes)
+            log(f"  [Global Timeout] Forcing recommendation: '{scheme}'")
+            action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
+            raw = json.dumps(action_data)
+            
         # ── FORCE RECOMMEND if question budget exhausted ──
-        if len(asked_questions) >= max_q:
+        elif len(asked_questions) >= max_q:
             scheme = heuristic_recommendation(env, task_name, available_schemes)
             log(f"  [Budget guard] Forcing recommendation: '{scheme}'")
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
@@ -371,8 +380,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                             model=MODEL,
                             messages=messages,
                             temperature=0.2,
-                            max_tokens=150,
-                            timeout=25.0,
+                            max_tokens=100,
+                            timeout=15.0,
                         )
                         raw = response.choices[0].message.content.strip()
                         break
@@ -380,7 +389,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                         log(f"API error: {e}")
                         if "402" in str(e):
                             log("CREDIT LIMIT REACHED: Please check Hugging Face Billing. Falling back to heuristics.")
-                        time.sleep(1)
 
             if raw is None:
                 log("  All retries failed — using heuristic.")

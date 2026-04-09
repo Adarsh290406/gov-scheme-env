@@ -205,8 +205,13 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
     obs = env.state.observation
     occ = obs.occupation.value if obs.occupation else ""
 
-    if obs.has_disability is True:
-        for name in ["Divyangjan Scholarship", "Indira Gandhi Disability Pension"]:
+    if occ == "farmer":
+        land = obs.land_ownership or ""
+        # Ensure it doesn't pick a disability scholarship for a farmer over Kisan
+        if land == "owner" or not land:
+            if "PM Kisan Samman Nidhi" in available_schemes:
+                return "PM Kisan Samman Nidhi"
+        for name in ["Kisan Credit Card", "Fasal Bima Yojana"]:
             if name in available_schemes:
                 return name
 
@@ -221,11 +226,10 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
             if name in available_schemes:
                 return name
 
-    if occ == "farmer":
-        land = obs.land_ownership or ""
-        if land == "owner":
-            if "PM Kisan Samman Nidhi" in available_schemes:
-                return "PM Kisan Samman Nidhi"
+    if obs.has_disability is True:
+        for name in ["Divyangjan Scholarship", "Indira Gandhi Disability Pension"]:
+            if name in available_schemes:
+                return name
         for name in ["Kisan Credit Card", "Fasal Bima Yojana"]:
             if name in available_schemes:
                 return name
@@ -698,7 +702,8 @@ def main():
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
-    sys.exit(0)
+    import os
+    os._exit(0)
 
 
 if __name__ == "__main__":

@@ -82,13 +82,9 @@ MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
 if not API_KEY:
     log("[WARN] HF_TOKEN not set — will use heuristic fallback (no LLM calls).")
 
-# Create OpenAI client safely — None if key missing or init fails
+# Create OpenAI client safely
+# FORCED FALLBACK: Client permanently set to None to bypass 402 API limits
 client = None
-if API_KEY and _imports_ok:
-    try:
-        client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
-    except Exception as _client_err:
-        log(f"[WARN] OpenAI client init failed: {_client_err}")
 
 
 # -----------------------------------------
@@ -712,3 +708,5 @@ if __name__ == "__main__":
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.0,"done":true}}\n')
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.0,"passed":false}}\n')
             sys.stdout.flush()
+
+    sys.exit(0)

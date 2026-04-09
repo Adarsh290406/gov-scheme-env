@@ -438,6 +438,18 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
                 scheme = heuristic_recommendation(env, task_name, available_schemes)
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
 
+        # ── PREVENT EARLY RECOMMENDATION ──
+        if action_data["action_type"] == "recommend_scheme" and len(asked_questions) < 3:
+            log("  [Early recommendation guard] Forcing another question (minimum 3 required).")
+            priority_order = [
+                "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
+                "ask_land_ownership", "ask_caste", "ask_income", "ask_location",
+                "ask_education", "ask_age", "ask_bank_account", "ask_ration_card"
+            ]
+            fallback = next((a for a in priority_order if a not in asked_questions), "ask_location")
+            action_data["action_type"] = fallback
+            action_data["scheme_name"] = None
+
         # ── VALIDATE SCHEME NAME ──
         if action_data["action_type"] == "recommend_scheme":
             proposed = action_data.get("scheme_name") or ""

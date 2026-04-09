@@ -15,5 +15,5 @@ COPY . .
 # Hugging Face expects port 7860
 EXPOSE 7860
 
-# CHANGE THIS LINE: Run the server, not the script
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run inference script — produces [START]/[STEP]/[END] structured output on stdout
+CMD ["python", "-u", "inference.py"]

@@ -103,8 +103,8 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
         qual += 0.04
     score += qual
 
-    # Raw score natively bounded between 0.04 and 0.96
-    final = round(score, 3)
+    # Raw score natively bounded between 0.04 and 0.96, plus explicit safety clamp
+    final = round(max(0.01, min(0.99, score)), 3)
     return {
         "task": "hard", "score": final,
         "scheme_score": scheme_score, "priority_score": pri,

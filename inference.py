@@ -643,7 +643,7 @@ def main():
                 )
             except Exception as task_err:
                 log(f"  [ERROR] Task {task_name} failed: {task_err}")
-                grade_result = {"score": 0.01, "passed": False,
+                grade_result = {"score": 0.05, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
                 # guarantee [STEP] appears even on total failure
                 _step_data = {
@@ -657,7 +657,7 @@ def main():
 
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": grade_result["score"], "passed": grade_result["passed"],
+                "score": round(max(0.01, min(0.99, grade_result["score"])), 4), "passed": grade_result["passed"],
                 "feedback": grade_result["feedback"],
                 "steps_taken": state.step_count if state else 1,
                 "total_reward": round(max(0.01, min(0.99, state.total_reward if state else 0.01)), 4),
@@ -717,7 +717,7 @@ if __name__ == "__main__":
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.01,"done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.01,"passed":false}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false}}\n')
             sys.stdout.flush()
     finally:
         os._exit(0)

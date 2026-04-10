@@ -649,7 +649,7 @@ def main():
                 _step_data = {
                     "event": "STEP", "episode_id": episode_id, "task": task_name,
                     "step": 1, "action": "recommend_scheme", "scheme_name": "",
-                    "reward": 0.01, "reason": str(task_err), "done": True,
+                    "reward": 0.05, "reason": str(task_err), "done": True,
                 }
                 print(f"[STEP] {json.dumps(_step_data)}", flush=True)
 

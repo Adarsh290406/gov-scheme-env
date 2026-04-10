@@ -644,9 +644,9 @@ class GovSchemeEnvironment:
                 done = True
 
             elif recommended in citizen.correct_schemes:
-                # Efficiency bonus scales within [0.0, 1.0] ceiling
+                # Efficiency bonus scales up to 0.99 ceiling safely
                 efficiency_bonus = min(0.3, max(0, (self.max_steps - self.state.step_count) * 0.05))
-                reward_value = min(1.0, 0.7 + efficiency_bonus)
+                reward_value = min(0.99, 0.7 + efficiency_bonus)
                 reward_reason = (
                     f"CORRECT! '{recommended}' is perfect for this citizen! "
                     f"Efficiency bonus: +{round(efficiency_bonus, 2)}"
@@ -690,14 +690,14 @@ class GovSchemeEnvironment:
             info["timeout"] = True
             info["correct_schemes"] = citizen.correct_schemes
 
+        # Hard clamp: reward is always strictly in (0.0, 1.0) BEFORE accumulation
+        reward_value = round(max(0.01, min(0.99, reward_value)), 3)
+
         # ── Update totals ──
         self.state.total_reward += reward_value
         self.state.is_done = done
         obs.done = done
         obs.last_action_result = reward_reason
-
-        # Hard clamp: reward is always strictly in (0.0, 1.0)
-        reward_value = round(max(0.01, min(0.99, reward_value)), 3)
 
         reward = Reward(
             value=reward_value,

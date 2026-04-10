@@ -60,50 +60,51 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
 
     if is_correct:
         if recommended_scheme in ["PM Kisan Samman Nidhi", "Kisan Credit Card"]:
-            scheme_score = 0.4
+            scheme_score = 0.39
             feedback.append(f"Best choice! '{recommended_scheme}' is the top priority for this farmer.")
         elif recommended_scheme in ["Fasal Bima Yojana", "Pradhan Mantri Fasal Bima Yojana (PMFBY)",
                                      "Soil Health Card Scheme", "Pradhan Mantri Krishi Sinchayee Yojana (PMKSY)"]:
-            scheme_score = 0.35
+            scheme_score = 0.34
             feedback.append(f"Great agricultural scheme choice — '{recommended_scheme}'.")
         else:
-            scheme_score = 0.25
+            scheme_score = 0.24
             feedback.append(f"Correct — '{recommended_scheme}' applies but not the top priority.")
     else:
-        scheme_score = 0.0
+        scheme_score = 0.01
         feedback.append("Wrong scheme. Top options: PM Kisan Samman Nidhi, Kisan Credit Card, Fasal Bima Yojana")
 
     score += scheme_score
 
     if recommended_scheme in TOP_PRIORITY[:2]:
-        pri = 0.2; feedback.append("Best possible scheme chosen!")
+        pri = 0.19; feedback.append("Best possible scheme chosen!")
     elif recommended_scheme in TOP_PRIORITY[2:5]:
-        pri = 0.15; feedback.append("Great agricultural scheme.")
+        pri = 0.14; feedback.append("Great agricultural scheme.")
     elif is_correct:
-        pri = 0.05; feedback.append("Valid but not the highest priority.")
+        pri = 0.04; feedback.append("Valid but not the highest priority.")
     else:
-        pri = 0.0
+        pri = 0.01
     score += pri
 
     if steps_taken <= 4:
-        eff = 0.2; feedback.append("Excellent efficiency!")
+        eff = 0.19; feedback.append("Excellent efficiency!")
     elif steps_taken <= 6:
-        eff = 0.1; feedback.append("Good efficiency.")
+        eff = 0.09; feedback.append("Good efficiency.")
     else:
-        eff = 0.0; feedback.append("Too many steps.")
+        eff = 0.01; feedback.append("Too many steps.")
     score += eff
 
-    qual = 0.0
+    qual = 0.01
     key = ["ask_occupation", "ask_land_ownership", "ask_income", "ask_location"]
     if questions_asked and questions_asked[0] == "ask_occupation":
-        qual += 0.1; feedback.append("Smart: asked occupation first.")
+        qual += 0.09; feedback.append("Smart: asked occupation first.")
     if len([q for q in questions_asked if q in key]) >= 3:
-        qual += 0.1; feedback.append("Asked all critical questions including land ownership.")
+        qual += 0.09; feedback.append("Asked all critical questions including land ownership.")
     elif len([q for q in questions_asked if q in key]) >= 2:
-        qual += 0.05
+        qual += 0.04
     score += qual
 
-    final = round(min(0.99, max(0.01, score)), 3)
+    # Raw score natively bounded between 0.04 and 0.96
+    final = round(score, 3)
     return {
         "task": "medium", "score": final,
         "scheme_score": scheme_score, "priority_score": pri,

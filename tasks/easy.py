@@ -52,41 +52,42 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
 
     if is_correct:
         if recommended_scheme in ["PM Ujjwala Yojana", "Ujjwala Scheme"]:
-            scheme_score = 0.5
+            scheme_score = 0.49
             feedback.append("Perfect! PM Ujjwala Yojana is the top priority for a rural BPL woman.")
         elif recommended_scheme in ["Ayushman Bharat", "MGNREGA", "PM Awas Yojana Gramin"]:
-            scheme_score = 0.4
+            scheme_score = 0.39
             feedback.append(f"Great choice! '{recommended_scheme}' is highly relevant.")
         else:
-            scheme_score = 0.3
+            scheme_score = 0.29
             feedback.append(f"Correct — '{recommended_scheme}' applies to this citizen.")
     else:
-        scheme_score = 0.0
+        scheme_score = 0.01
         feedback.append("Wrong scheme. Top options: PM Ujjwala Yojana, Ayushman Bharat, MGNREGA")
 
     score += scheme_score
 
     if steps_taken <= 4:
-        eff = 0.3; feedback.append("Excellent efficiency!")
+        eff = 0.29; feedback.append("Excellent efficiency!")
     elif steps_taken <= 6:
-        eff = 0.2; feedback.append("Good efficiency.")
+        eff = 0.19; feedback.append("Good efficiency.")
     elif steps_taken <= 8:
-        eff = 0.1; feedback.append("Average efficiency.")
+        eff = 0.09; feedback.append("Average efficiency.")
     else:
-        eff = 0.0; feedback.append("Poor efficiency.")
+        eff = 0.01; feedback.append("Poor efficiency.")
     score += eff
 
-    qual = 0.0
+    qual = 0.01
     key = ["ask_occupation", "ask_bpl", "ask_gender", "ask_location"]
     if questions_asked and questions_asked[0] == "ask_occupation":
-        qual += 0.1; feedback.append("Smart: asked occupation first.")
+        qual += 0.09; feedback.append("Smart: asked occupation first.")
     if len([q for q in questions_asked if q in key]) >= 3:
-        qual += 0.1; feedback.append("Asked the right questions.")
+        qual += 0.09; feedback.append("Asked the right questions.")
     elif len([q for q in questions_asked if q in key]) >= 2:
-        qual += 0.05
+        qual += 0.04
     score += qual
 
-    final = round(min(0.99, max(0.01, score)), 3)
+    # Raw score natively bounded between 0.03 and 0.97
+    final = round(score, 3)
     return {
         "task": "easy", "score": final,
         "scheme_score": scheme_score, "efficiency_score": eff, "quality_score": qual,

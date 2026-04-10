@@ -64,46 +64,47 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
     is_correct = recommended_scheme in HARD_CITIZEN.correct_schemes or recommended_scheme in TOP_PRIORITY
 
     if is_correct:
-        scheme_score = 0.3
+        scheme_score = 0.29
         feedback.append(f"Correct — '{recommended_scheme}' applies to this citizen.")
     else:
-        scheme_score = 0.0
+        scheme_score = 0.01
         feedback.append(f"Wrong scheme. Top options: Divyangjan Scholarship, Post Matric Scholarship for SC Students")
     score += scheme_score
 
     if recommended_scheme in TOP_PRIORITY[:2]:
-        pri = 0.3; feedback.append("Perfect priority — most targeted scheme for disability + SC!")
+        pri = 0.29; feedback.append("Perfect priority — most targeted scheme for disability + SC!")
     elif recommended_scheme in TOP_PRIORITY[2:6]:
-        pri = 0.2; feedback.append("Excellent — highly targeted SC scholarship chosen.")
+        pri = 0.19; feedback.append("Excellent — highly targeted SC scholarship chosen.")
     elif recommended_scheme in TOP_PRIORITY[6:10]:
-        pri = 0.15; feedback.append("Good scholarship choice.")
+        pri = 0.14; feedback.append("Good scholarship choice.")
     elif is_correct:
-        pri = 0.05; feedback.append("Valid but not the highest priority.")
+        pri = 0.04; feedback.append("Valid but not the highest priority.")
     else:
-        pri = 0.0
+        pri = 0.01
     score += pri
 
     if steps_taken <= 3:
-        eff = 0.2; feedback.append("Outstanding efficiency!")
+        eff = 0.19; feedback.append("Outstanding efficiency!")
     elif steps_taken <= 4:
-        eff = 0.15; feedback.append("Very efficient.")
+        eff = 0.14; feedback.append("Very efficient.")
     elif steps_taken <= 5:
-        eff = 0.1; feedback.append("Decent efficiency.")
+        eff = 0.09; feedback.append("Decent efficiency.")
     else:
-        eff = 0.05; feedback.append("Used all steps — needs better decision making.")
+        eff = 0.01; feedback.append("Used all steps — needs better decision making.")
     score += eff
 
-    qual = 0.0
+    qual = 0.01
     critical = ["ask_occupation", "ask_disability", "ask_caste", "ask_education", "ask_gender"]
     if questions_asked and questions_asked[0] == "ask_occupation":
-        qual += 0.1; feedback.append("Smart: asked occupation first under time pressure.")
+        qual += 0.09; feedback.append("Smart: asked occupation first under time pressure.")
     if len([q for q in questions_asked if q in critical]) >= 3:
-        qual += 0.1; feedback.append("Asked crucial targeted questions.")
+        qual += 0.09; feedback.append("Asked crucial targeted questions.")
     elif len([q for q in questions_asked if q in critical]) >= 2:
-        qual += 0.05
+        qual += 0.04
     score += qual
 
-    final = round(min(0.99, max(0.01, score)), 3)
+    # Raw score natively bounded between 0.04 and 0.96
+    final = round(score, 3)
     return {
         "task": "hard", "score": final,
         "scheme_score": scheme_score, "priority_score": pri,

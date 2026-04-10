@@ -696,14 +696,14 @@ class GovSchemeEnvironment:
         obs.done = done
         obs.last_action_result = reward_reason
 
-        # Hard clamp: reward is always in [0.0, 1.0]
-        reward_value = round(max(0.0, min(1.0, reward_value)), 3)
+        # Hard clamp: reward is always strictly in (0.0, 1.0)
+        reward_value = round(max(0.01, min(0.99, reward_value)), 3)
 
         reward = Reward(
             value=reward_value,
             reason=reward_reason,
             total_score=round(
-                max(0.0, min(1.0, self.state.total_reward / self.max_steps)),
+                max(0.01, min(0.99, self.state.total_reward / self.max_steps)),
                 3
             )
         )

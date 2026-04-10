@@ -141,7 +141,7 @@ class Observation(BaseModel):
 class Reward(BaseModel):
     value: float        = Field(..., description="Reward for this step")
     reason: str         = Field(..., description="Why this reward was given")
-    total_score: float  = Field(default=0.0, description="Running score 0.0 to 1.0")
+    total_score: float  = Field(default=0.01, description="Running score 0.01 to 0.99")
 
 
 # -----------------------------------------

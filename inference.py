@@ -496,6 +496,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             "done":        result.done,
         }
         print(f"[STEP] {json.dumps(_step_data)}", flush=True)
+        sys.stdout.flush()
 
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
@@ -666,6 +667,8 @@ def main():
                 "total_reward": safe_total_reward,
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
+            sys.stdout.flush()
+            time.sleep(0.5)
 
             log(f"  Score    : {grade_result['score']}")
             log(f"  Passed   : {grade_result['passed']}")

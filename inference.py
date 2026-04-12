@@ -483,6 +483,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
               + f" | Reward: {result.reward.value:.3f}")
 
         # ── [STEP] structured log — parsed by the evaluator ──
+        safe_reward = round(float(max(0.02, min(0.98, result.reward.value))), 2)
         _step_data = {
             "event":       "STEP",
             "episode_id":  episode_id,
@@ -490,7 +491,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             "step":        step,
             "action":      action.action_type.value,
             "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
-            "reward":      round(max(0.01, min(0.99, result.reward.value)), 4),
+            "reward":      safe_reward,
             "reason":      result.reward.reason,
             "done":        result.done,
         }
@@ -655,12 +656,14 @@ def main():
 
             results[task_name] = grade_result
 
+            safe_score = round(float(max(0.02, min(0.98, grade_result["score"]))), 2)
+            safe_total_reward = round(float(max(0.02, min(0.98, state.total_reward if state else 0.05))), 2)
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": round(max(0.01, min(0.99, grade_result["score"])), 4), "passed": grade_result["passed"],
+                "score": safe_score, "passed": grade_result["passed"],
                 "feedback": grade_result["feedback"],
                 "steps_taken": state.step_count if state else 1,
-                "total_reward": round(max(0.01, min(0.99, state.total_reward if state else 0.01)), 4),
+                "total_reward": safe_total_reward,
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
@@ -716,7 +719,7 @@ if __name__ == "__main__":
         for _t in ["easy", "medium", "hard"]:
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
-            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.01,"done":true}}\n')
+            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.05,"done":true}}\n')
             sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false}}\n')
             sys.stdout.flush()
     finally:

@@ -656,7 +656,7 @@ def main():
 
             results[task_name] = grade_result
 
-            safe_final_score = float(f"{max(0.05, min(0.95, float(grade_result['score']))):.2f}")
+            safe_final_score = round(min(0.94, max(0.06, float(grade_result['score']))), 3)
             safe_total_reward = float(f"{max(0.05, min(0.95, float(state.total_reward if state else 0.05))):.2f}")
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,

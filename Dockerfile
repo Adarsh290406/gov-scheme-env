@@ -15,5 +15,5 @@ COPY . .
 # Hugging Face expects port 7860
 EXPOSE 7860
 
-# Change the last line of your Dockerfile to this:
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+RUN chmod +x start.sh
+CMD ["bash", "start.sh"]

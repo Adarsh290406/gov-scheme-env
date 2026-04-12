@@ -88,10 +88,9 @@ try:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY if API_KEY else "dummy-key")
 except Exception as _client_err:
     log(f"[WARN] OpenAI client init failed: {_client_err}")
-    client = Noneclient = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = None
 
-
-# -----------------------------------------
+# -------------------------------------- ---
 # SCHEME KNOWLEDGE BASE
 # Maps key citizen attributes to the
 # schemes that specifically require them.

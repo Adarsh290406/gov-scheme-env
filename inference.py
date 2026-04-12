@@ -606,6 +606,7 @@ FALLBACK_TASKS = [
 
 
 def main():
+    single_task = os.getenv("TASK_NAME", "").lower()
     log("=" * 60)
     log("Gov Scheme Finder — Inference Script")
     log(f"Model    : {MODEL}")
@@ -630,6 +631,9 @@ def main():
         ]
 
         for task_name, task_fn, grade_fn, fallback_cfg in task_quads:
+            if single_task and task_name != single_task:
+                continue
+
             log(f"\n[TASK] {task_name.upper()}")
             log("-" * 40)
 
@@ -689,8 +693,7 @@ def main():
 
             print(f"[END] success=true steps=1 score=0.500 rewards=0.5", flush=True)
 
-    import os
-    os._exit(0)
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":
@@ -706,4 +709,4 @@ if __name__ == "__main__":
             sys.stdout.write(f'[END] success=false steps=1 score=0.050 rewards=0.05\n')
             sys.stdout.flush()
     finally:
-        os._exit(0)
+        sys.stdout.flush()

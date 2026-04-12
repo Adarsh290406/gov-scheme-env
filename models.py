@@ -191,7 +191,7 @@ class State(BaseModel):
     difficulty: Difficulty
     episode_id: str
     step_count: int             = Field(default=0)
-    total_reward: float         = Field(default=0.0)
+    total_reward: float         = Field(default=0.01)
     is_done: bool               = Field(default=False)
     questions_asked: List[str]  = Field(default_factory=list)
     occupation_asked_first: bool = Field(default=False)

@@ -53,7 +53,7 @@ TOP_PRIORITY = [
 
 
 def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_steps=8):
-    score = 0.0
+    score = 0.01
     feedback = []
 
     is_correct = recommended_scheme in MEDIUM_CITIZEN.correct_schemes or recommended_scheme in TOP_PRIORITY

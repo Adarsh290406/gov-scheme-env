@@ -45,7 +45,7 @@ TOP_PRIORITY = ["PM Ujjwala Yojana", "Ujjwala Scheme", "Ayushman Bharat",
 
 
 def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_steps=10):
-    score = 0.0
+    score = 0.01
     feedback = []
 
     is_correct = recommended_scheme in EASY_CITIZEN.correct_schemes or recommended_scheme in TOP_PRIORITY

@@ -48,7 +48,7 @@ def check_scheme_conditions(citizen: CitizenProfile, scheme: dict) -> tuple:
     - partial_score: 0.0 to 0.5 for partial matches
     """
     conditions = scheme.get("conditions", {})
-    partial_score = 0.0
+    partial_score = 0.01
     failed_conditions = 0
     total_conditions = 0
 
@@ -135,18 +135,18 @@ def check_scheme_conditions(citizen: CitizenProfile, scheme: dict) -> tuple:
             failed_conditions += 1
 
     if total_conditions == 0:
-        return True, 0.0
+        return True, 0.01
 
     if failed_conditions == 0:
-        return True, 0.0  # Full match
+        return True, 0.01  # Full match
 
-    match_ratio = 1.0 - (failed_conditions / total_conditions)
+    match_ratio = 0.99 - (failed_conditions / total_conditions)
     if match_ratio >= 0.7:
         partial_score = 0.3   # Almost qualifies
     elif match_ratio >= 0.5:
         partial_score = 0.15  # Partially qualifies
     else:
-        partial_score = 0.0   # Too far off
+        partial_score = 0.01   # Too far off
 
     return False, partial_score
 
@@ -158,7 +158,7 @@ def check_scheme_conditions(citizen: CitizenProfile, scheme: dict) -> tuple:
 # -----------------------------------------
 
 QUESTION_RELEVANCE = {
-    ActionType.ASK_OCCUPATION:      1.0,
+    ActionType.ASK_OCCUPATION:      0.99,
     ActionType.ASK_INCOME:          0.9,
     ActionType.ASK_BPL:             0.9,
     ActionType.ASK_LOCATION:        0.7,
@@ -200,7 +200,7 @@ STEP_DECAY = 0.02
 
 # Noise levels per difficulty
 NOISE_LEVELS = {
-    Difficulty.EASY:   0.0,
+    Difficulty.EASY:   0.01,
     Difficulty.MEDIUM: 0.10,
     Difficulty.HARD:   0.20,
 }
@@ -214,7 +214,7 @@ NOISY_QUESTIONS = [
 
 # Scheme expiry
 SCHEME_EXPIRY_CHANCE = {
-    Difficulty.EASY:   0.0,
+    Difficulty.EASY:   0.01,
     Difficulty.MEDIUM: 0.10,
     Difficulty.HARD:   0.20,
 }
@@ -223,7 +223,7 @@ SCHEME_EXPIRY_INTERVAL = 3
 
 # Incomplete info
 INCOMPLETE_INFO_CHANCE = {
-    Difficulty.EASY:   0.0,
+    Difficulty.EASY:   0.01,
     Difficulty.MEDIUM: 0.15,
     Difficulty.HARD:   0.25,
 }
@@ -344,7 +344,7 @@ class GovSchemeEnvironment:
     # -----------------------------------------
 
     def _apply_noise(self, action_type: ActionType, true_value):
-        noise_chance = NOISE_LEVELS.get(self.difficulty, 0.0)
+        noise_chance = NOISE_LEVELS.get(self.difficulty, 0.01)
         if action_type not in NOISY_QUESTIONS or random.random() > noise_chance:
             return true_value, False
 
@@ -364,7 +364,7 @@ class GovSchemeEnvironment:
     # -----------------------------------------
 
     def _check_scheme_expiry(self, obs: Observation) -> Optional[str]:
-        expiry_chance = SCHEME_EXPIRY_CHANCE.get(self.difficulty, 0.0)
+        expiry_chance = SCHEME_EXPIRY_CHANCE.get(self.difficulty, 0.01)
         if (self.state.step_count % SCHEME_EXPIRY_INTERVAL == 0
                 and self.state.step_count > 0
                 and random.random() < expiry_chance
@@ -387,7 +387,7 @@ class GovSchemeEnvironment:
     # -----------------------------------------
 
     def _check_incomplete_info(self, action_type: ActionType) -> bool:
-        incomplete_chance = INCOMPLETE_INFO_CHANCE.get(self.difficulty, 0.0)
+        incomplete_chance = INCOMPLETE_INFO_CHANCE.get(self.difficulty, 0.01)
         if action_type not in INCOMPLETE_INFO_QUESTIONS:
             return False
         return random.random() < incomplete_chance
@@ -402,7 +402,7 @@ class GovSchemeEnvironment:
         """
         Returns (penalty, reason) if question is irrelevant
         given what agent already knows about citizen.
-        Returns (0.0, "") if question is relevant.
+        Returns (0.01, "") if question is relevant.
         """
         obs = self.state.observation
 
@@ -423,7 +423,7 @@ class GovSchemeEnvironment:
         if action_type == ActionType.ASK_DISABILITY and obs.has_disability is not None:
             return -0.3, "Already know disability status!"
 
-        return 0.0, ""
+        return 0.01, ""
 
     # -----------------------------------------
     # REWARD DECAY — Urgency over time
@@ -481,7 +481,7 @@ class GovSchemeEnvironment:
 
         citizen = self.state.citizen_profile
         obs = self.state.observation
-        reward_value = 0.0
+        reward_value = 0.01
         reward_reason = ""
         done = False
         info = {}
@@ -493,13 +493,13 @@ class GovSchemeEnvironment:
 
             # Penalty: repeated question
             if question in self.state.questions_asked:
-                reward_value = 0.0
+                reward_value = 0.01
                 reward_reason = f"Already asked '{question}'! Repeating wastes steps."
 
             # Penalty: income before occupation
             elif (action.action_type == ActionType.ASK_INCOME
                   and ActionType.ASK_OCCUPATION.value not in self.state.questions_asked):
-                reward_value = 0.0
+                reward_value = 0.01
                 reward_reason = (
                     "Asked income before occupation! Context unknown. No reward."
                 )
@@ -513,7 +513,7 @@ class GovSchemeEnvironment:
                 irrelevance_penalty, irrelevance_reason = self._get_irrelevance_penalty(action.action_type)
 
                 if irrelevance_penalty < 0:
-                    reward_value = 0.0
+                    reward_value = 0.01
                     reward_reason = irrelevance_reason
                     self.state.questions_asked.append(question)
 

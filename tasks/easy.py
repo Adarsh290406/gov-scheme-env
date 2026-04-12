@@ -87,7 +87,7 @@ def grade(recommended_scheme, questions_asked, steps_taken, total_reward, max_st
     score += qual
 
     # Change the very last line of your grade function
-    final = round(max(0.05, min(0.95, score)), 2)
+    final = float(max(0.001, min(0.999, float(score))))
 
     return {
         "task": "easy", "score": final,

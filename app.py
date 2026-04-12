@@ -271,9 +271,9 @@ def step(request: StepRequest):
         session_recommendations[request.session_id] = request.action.scheme_name
 
     if hasattr(result.reward, "value"):
-        result.reward.value = round(max(0.05, min(0.95, result.reward.value)), 4)
+        result.reward.value = float(max(0.001, min(0.999, float(result.reward.value))))
     elif isinstance(result.reward, (int, float)):
-        result.reward = round(max(0.05, min(0.95, float(result.reward))), 4)
+        result.reward = float(max(0.001, min(0.999, float(result.reward))))
 
     return {
         "session_id": request.session_id,

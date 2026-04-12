@@ -665,8 +665,6 @@ def main():
                 "steps_taken": state.step_count if state else 1,
                 "total_reward": safe_total_reward,
             }
-            import sys
-            print(f"[DEBUG] raw_score={grade_result['score']} type={type(grade_result['score'])}", file=sys.stderr, flush=True)
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
             log(f"  Score    : {grade_result['score']}")

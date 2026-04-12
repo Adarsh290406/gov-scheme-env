@@ -222,7 +222,8 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
                          "National Fellowship for Scheduled Caste Students"]:
                 if name in available_schemes:
                     return name
-        for name in ["PM Scholarship Scheme", "National Scholarship Portal"]:
+        for name in ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students",
+                     "SC ST Scholarship", "PM Scholarship Scheme", "National Scholarship Portal"]:
             if name in available_schemes:
                 return name
 
@@ -251,6 +252,12 @@ def heuristic_recommendation(env, task_name: str, available_schemes: list) -> st
         "medium": "PM Kisan Samman Nidhi",
         "hard":   "Divyangjan Scholarship",
     }
+    # Always pick from available_schemes as last resort
+    for name in ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students",
+                 "SC ST Scholarship", "Indira Gandhi Disability Pension",
+                 "PM Scholarship Scheme"]:
+        if name in available_schemes:
+            return name
     default = task_defaults.get(task_name, "")
     if default in available_schemes:
         return default

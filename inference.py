@@ -84,7 +84,11 @@ if not API_KEY:
 
 # Use the validator's injected variables
 # DO NOT set client = None here
-client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+try:
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY if API_KEY else "dummy-key")
+except Exception as _client_err:
+    log(f"[WARN] OpenAI client init failed: {_client_err}")
+    client = Noneclient = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 
 # -----------------------------------------

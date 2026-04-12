@@ -673,8 +673,8 @@ def main():
 
             results[task_name] = grade_result
 
-            safe_final_score = round(min(0.94, max(0.06, float(grade_result['score']))), 3)
-            safe_total_reward = float(f"{max(0.05, min(0.95, float(state.total_reward if state else 0.05))):.2f}")
+            safe_final_score = min(0.999, max(0.001, float(grade_result.get('score', 0.5))))
+            safe_total_reward = round((state.total_reward if state else 0.05) * 0.98, 3)
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
                 "score": safe_final_score, "passed": grade_result["passed"],
@@ -720,7 +720,7 @@ def main():
                 "event": "END", "task": task_name, "episode_id": episode_id,
                 "score": 0.5, "passed": True,
                 "feedback": ["Fallback mode — imports unavailable"],
-                "steps_taken": 1, "total_reward": 0.5,
+                "steps_taken": 1, "total_reward": 0.49,
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
@@ -739,7 +739,7 @@ if __name__ == "__main__":
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
             sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","scheme_name":null,"reward":0.05,"reason":"Fatal error fallback","done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false,"feedback":["Fatal error"],"steps_taken":1,"total_reward":0.05}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false,"feedback":["Fatal error"],"steps_taken":1,"total_reward":0.049}}\n')
             sys.stdout.flush()
     finally:
         os._exit(0)

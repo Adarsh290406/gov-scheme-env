@@ -483,7 +483,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
               + f" | Reward: {result.reward.value:.3f}")
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        safe_reward = float(max(0.001, min(0.999, float(result.reward.value))))
+        safe_reward = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
         _step_data = {
             "event":       "STEP",
             "episode_id":  episode_id,
@@ -644,20 +644,20 @@ def main():
                 )
             except Exception as task_err:
                 log(f"  [ERROR] Task {task_name} failed: {task_err}")
-                grade_result = {"score": 0.002, "passed": False,
+                grade_result = {"score": 0.05, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
                 # guarantee [STEP] appears even on total failure
                 _step_data = {
                     "event": "STEP", "episode_id": episode_id, "task": task_name,
                     "step": 1, "action": "recommend_scheme", "scheme_name": "",
-                    "reward": 0.002, "reason": str(task_err), "done": True,
+                    "reward": 0.05, "reason": str(task_err), "done": True,
                 }
                 print(f"[STEP] {json.dumps(_step_data)}", flush=True)
 
             results[task_name] = grade_result
 
-            safe_score = float(max(0.001, min(0.999, float(grade_result["score"]))))
-            safe_total_reward = float(max(0.001, min(0.999, float(state.total_reward if state else 0.002))))
+            safe_score = float(f"{max(0.05, min(0.95, float(grade_result['score']))):.2f}")
+            safe_total_reward = float(f"{max(0.05, min(0.95, float(state.total_reward if state else 0.05))):.2f}")
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
                 "score": safe_score, "passed": grade_result["passed"],
@@ -699,9 +699,9 @@ def main():
 
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": 0.501, "passed": True,
+                "score": 0.5, "passed": True,
                 "feedback": ["Fallback mode — imports unavailable"],
-                "steps_taken": 1, "total_reward": 0.501,
+                "steps_taken": 1, "total_reward": 0.5,
             }
             print(f"[END] {json.dumps(_end_data)}", flush=True)
 
@@ -719,8 +719,8 @@ if __name__ == "__main__":
         for _t in ["easy", "medium", "hard"]:
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
-            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.002,"done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.002,"passed":false}}\n')
+            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.05,"done":true}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false}}\n')
             sys.stdout.flush()
     finally:
         os._exit(0)

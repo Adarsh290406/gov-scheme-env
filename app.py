@@ -272,7 +272,10 @@ def step(request: StepRequest):
 
     if hasattr(result.reward, "value"):
         result.reward.value = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
-    elif isinstance(result.reward, (int, float)):
+    if hasattr(result.reward, "total_score"):
+        result.reward.total_score = float(f"{max(0.05, min(0.95, float(result.reward.total_score))):.2f}")
+
+    if isinstance(result.reward, (int, float)):
         result.reward = float(f"{max(0.05, min(0.95, float(result.reward))):.2f}")
 
     return {

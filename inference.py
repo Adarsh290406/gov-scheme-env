@@ -499,7 +499,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         step += 1
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        safe_step_reward = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
+        safe_step_reward = float(f"{max(0.05, min(0.19, float(result.reward.value))):.2f}")
         _step_data = {
             "event":       "STEP",
             "episode_id":  episode_id,

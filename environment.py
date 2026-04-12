@@ -158,20 +158,20 @@ def check_scheme_conditions(citizen: CitizenProfile, scheme: dict) -> tuple:
 # -----------------------------------------
 
 QUESTION_RELEVANCE = {
-    ActionType.ASK_OCCUPATION:      0.99,
-    ActionType.ASK_INCOME:          0.9,
-    ActionType.ASK_BPL:             0.9,
-    ActionType.ASK_LOCATION:        0.7,
-    ActionType.ASK_GENDER:          0.6,
-    ActionType.ASK_CASTE:           0.6,
-    ActionType.ASK_DISABILITY:      0.5,
-    ActionType.ASK_AGE:             0.4,
-    ActionType.ASK_EDUCATION:       0.5,
-    ActionType.ASK_BANK_ACCOUNT:    0.4,
-    ActionType.ASK_RATION_CARD:     0.4,
-    ActionType.ASK_MARITAL_STATUS:  0.3,
-    ActionType.ASK_LAND_OWNERSHIP:  0.5,
-    ActionType.ASK_STATE:           0.3,
+    ActionType.ASK_OCCUPATION:      0.099,
+    ActionType.ASK_INCOME:          0.09,
+    ActionType.ASK_BPL:             0.09,
+    ActionType.ASK_LOCATION:        0.07,
+    ActionType.ASK_GENDER:          0.06,
+    ActionType.ASK_CASTE:           0.06,
+    ActionType.ASK_DISABILITY:      0.05,
+    ActionType.ASK_AGE:             0.04,
+    ActionType.ASK_EDUCATION:       0.05,
+    ActionType.ASK_BANK_ACCOUNT:    0.04,
+    ActionType.ASK_RATION_CARD:     0.04,
+    ActionType.ASK_MARITAL_STATUS:  0.03,
+    ActionType.ASK_LAND_OWNERSHIP:  0.05,
+    ActionType.ASK_STATE:           0.03,
 }
 
 # Questions irrelevant for certain occupations
@@ -646,7 +646,7 @@ class GovSchemeEnvironment:
             elif recommended in citizen.correct_schemes:
                 # Efficiency bonus scales up to 0.99 ceiling safely
                 efficiency_bonus = min(0.3, max(0, (self.max_steps - self.state.step_count) * 0.05))
-                reward_value = min(0.99, 0.7 + efficiency_bonus)
+                reward_value = min(0.59, 0.4 + efficiency_bonus)
                 reward_reason = (
                     f"CORRECT! '{recommended}' is perfect for this citizen! "
                     f"Efficiency bonus: +{round(efficiency_bonus, 2)}"

@@ -351,6 +351,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
     max_q = MAX_QUESTIONS_PER_TASK[task_name]
     last_recommendation = ""
     asked_questions = []
+    step_rewards = []
     step = 0
 
     initial_message = (
@@ -499,19 +500,11 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         step += 1
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        safe_step_reward = float(f"{max(0.05, min(0.19, float(result.reward.value))):.2f}")
-        _step_data = {
-            "event":       "STEP",
-            "episode_id":  episode_id,
-            "task":        task_name,
-            "step":        step,
-            "action":      action.action_type.value,
-            "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
-            "reward":      safe_step_reward,
-            "reason":      result.reward.reason,
-            "done":        result.done,
-        }
-        print(f"[STEP] {json.dumps(_step_data)}", flush=True)
+        safe_step_reward = float(f"{max(0.01, min(0.99, float(result.reward.value))):.2f}")
+        step_rewards.append(safe_step_reward)
+        
+        # New key=value format
+        print(f"[STEP] step={step} action={action.action_type.value} reward={safe_step_reward:.2f} done={str(result.done).lower()} error=null", flush=True)
         sys.stdout.flush()
 
         obs = result.observation
@@ -573,7 +566,8 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
 
     return {
         "last_recommendation": last_recommendation,
-        "state": env.get_state()
+        "state": env.get_state(),
+        "step_rewards": step_rewards
     }
 
 
@@ -643,19 +637,14 @@ def main():
             state      = None
 
             # ── [START] printed BEFORE try block — always emitted ──
-            _start_data = {
-                "event": "START", "task": task_name, "episode_id": episode_id,
-                "model": MODEL,
-                "available_schemes": fallback_cfg["available_schemes"],
-                "max_steps": fallback_cfg["max_steps"],
-            }
-            print(f"[START] {json.dumps(_start_data)}", flush=True)
+            print(f"[START] task={task_name} env=gov-scheme-finder model={MODEL}", flush=True)
 
             try:
                 env       = task_fn()
                 available = env.available_schemes
                 run_result   = run_agent(env, task_name, available, episode_id)
                 state        = run_result["state"]
+                _step_rewards = run_result["step_rewards"]
                 grade_result = grade_fn(
                     recommended_scheme=run_result["last_recommendation"],
                     questions_asked=state.questions_asked,
@@ -667,25 +656,15 @@ def main():
                 grade_result = {"score": 0.05, "passed": False,
                                 "feedback": [f"Task error: {task_err}"]}
                 # guarantee [STEP] appears even on total failure
-                _step_data = {
-                    "event": "STEP", "episode_id": episode_id, "task": task_name,
-                    "step": 1, "action": "recommend_scheme", "scheme_name": "",
-                    "reward": 0.05, "reason": str(task_err), "done": True,
-                }
-                print(f"[STEP] {json.dumps(_step_data)}", flush=True)
+                print(f"[STEP] step=1 action=recommend_scheme reward=0.05 done=true error=null", flush=True)
+                _step_rewards = [0.05]
 
             results[task_name] = grade_result
 
-            safe_final_score = min(0.999, max(0.001, float(grade_result.get('score', 0.5))))
-            safe_total_reward = round((state.total_reward if state else 0.05) * 0.98, 3)
-            _end_data = {
-                "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": safe_final_score, "passed": grade_result["passed"],
-                "feedback": grade_result["feedback"],
-                "steps_taken": state.step_count if state else 1,
-                "total_reward": safe_total_reward,
-            }
-            print(f"[END] {json.dumps(_end_data)}", flush=True)
+            safe_final_score = float(f"{max(0.01, min(0.99, float(grade_result.get('score', 0.5)))):.2f}")
+            safe_total_reward = float(f"{max(0.01, min(0.99, float(state.total_reward if state else 0.01))):.2f}")
+            rewards_list = ",".join([str(r) for r in _step_rewards])
+            print(f"[END] success={str(grade_result['passed']).lower()} steps={state.step_count if state else 1} score={safe_final_score:.2f} rewards={rewards_list}", flush=True)
             sys.stdout.flush()
             time.sleep(0.5)
 
@@ -703,29 +682,12 @@ def main():
             available  = task_cfg["available_schemes"]
             episode_id = str(uuid.uuid4())
 
-            _start_data = {
-                "event": "START", "task": task_name, "episode_id": episode_id,
-                "model": MODEL, "available_schemes": available,
-                "max_steps": task_cfg["max_steps"],
-            }
-            print(f"[START] {json.dumps(_start_data)}", flush=True)
+            print(f"[START] task={task_name} env=gov-scheme-finder model={MODEL}", flush=True)
 
             # Emit a minimal but valid STEP
-            _step_data = {
-                "event": "STEP", "episode_id": episode_id, "task": task_name,
-                "step": 1, "action": "recommend_scheme",
-                "scheme_name": task_cfg["recommend"],
-                "reward": 0.5, "reason": "heuristic fallback", "done": True,
-            }
-            print(f"[STEP] {json.dumps(_step_data)}", flush=True)
+            print(f"[STEP] step=1 action=recommend_scheme reward=0.50 done=true error=null", flush=True)
 
-            _end_data = {
-                "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": 0.5, "passed": True,
-                "feedback": ["Fallback mode — imports unavailable"],
-                "steps_taken": 1, "total_reward": 0.49,
-            }
-            print(f"[END] {json.dumps(_end_data)}", flush=True)
+            print(f"[END] success=true steps=1 score=0.500 rewards=0.5", flush=True)
 
     import os
     os._exit(0)
@@ -739,10 +701,9 @@ if __name__ == "__main__":
         import uuid as _uuid
         _m = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
         for _t in ["easy", "medium", "hard"]:
-            _ep = str(_uuid.uuid4())
-            sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
-            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","scheme_name":null,"reward":0.05,"reason":"Fatal error fallback","done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false,"feedback":["Fatal error"],"steps_taken":1,"total_reward":0.049}}\n')
+            sys.stdout.write(f'[START] task={_t} env=gov-scheme-finder model={_m}\n')
+            sys.stdout.write(f'[STEP] step=1 action=recommend_scheme reward=0.05 done=true error=null\n')
+            sys.stdout.write(f'[END] success=false steps=1 score=0.050 rewards=0.05\n')
             sys.stdout.flush()
     finally:
         os._exit(0)

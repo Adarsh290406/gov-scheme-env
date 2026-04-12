@@ -495,11 +495,6 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         result = env.step(action)
         step += 1
 
-        # ── human-readable log → stderr only ──
-        log(f"  Step {step}: {action.action_type.value}"
-              + (f" → '{action.scheme_name}'" if action.scheme_name else "")
-              + f" | Reward: {result.reward.value:.3f}")
-
         # ── [STEP] structured log — parsed by the evaluator ──
         safe_step_reward = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
         _step_data = {
@@ -519,6 +514,9 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
         obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
             asked_questions.append(action.action_type.value)
+
+        if result.done:
+            break
 
         known_fields = {
             "occupation":       obs.occupation.value if obs.occupation else None,

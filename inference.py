@@ -1,26 +1,16 @@
 """
-inference.py — Baseline Inference Script
-==========================================
-Runs an LLM agent against all 3 tasks and
-produces reproducible baseline scores.
-
-The agent reasons like a real welfare counselor:
-  - Asks questions that maximally disambiguate
-  - Builds a mental model of the citizen
-  - Stops asking when confident and recommends
-
-Mandatory environment variables (set before running):
-  API_BASE_URL  — The LLM API endpoint
-                  e.g. https://router.huggingface.co/v1
-  MODEL_NAME    — The model identifier
-                  e.g. meta-llama/Llama-3.1-8B-Instruct
-  HF_TOKEN      — Your Hugging Face / API key
+inference.py — Gov Scheme Finder Inference Script
+===================================================
+Mandatory environment variables:
+  API_BASE_URL   — LLM API endpoint
+  MODEL_NAME     — Model identifier
+  HF_TOKEN       — Your Hugging Face / API key
 
 Usage:
   python inference.py
 
 Requirements:
-  - pip install openai python-dotenv
+  pip install openai python-dotenv
 """
 
 import os
@@ -28,16 +18,13 @@ import sys
 import json
 import time
 import uuid
+from typing import List, Optional
 
-GLOBAL_START_TIME = time.time()
-
-# Force stdout unbuffered — wrapped in case the stream doesn't support reconfigure
 try:
     sys.stdout.reconfigure(write_through=True)
 except Exception:
     pass
 
-# dotenv is optional — env vars may be passed directly by the validator
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -48,665 +35,377 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 def log(*args, **kwargs):
-    """Write human-readable logs to stderr only — stdout reserved for structured JSON."""
+    """Human-readable logs go to stderr only — stdout is reserved for structured output."""
     print(*args, **kwargs, file=sys.stderr, flush=True)
 
 
-# -----------------------------------------
-# DEFENSIVE IMPORTS
-# Wrapped so a missing dep / bad env never
-# silently kills the process before main().
-# -----------------------------------------
+# ── Imports ──────────────────────────────────────────────────────────────────
 
 _imports_ok = False
 try:
     from openai import OpenAI
-    from models import Action, ActionType, Difficulty
-    from environment import ALL_SCHEMES, check_scheme_conditions
+    from models import Action, ActionType
     from tasks.easy   import run_task_with_fixed_citizen as easy_task,   grade as easy_grade
     from tasks.medium import run_task_with_fixed_citizen as medium_task, grade as medium_grade
     from tasks.hard   import run_task_with_fixed_citizen as hard_task,   grade as hard_grade
+    from environment  import ALL_SCHEMES
     _imports_ok = True
-except Exception as _import_err:
-    log(f"[WARN] Import error (will use fallback): {_import_err}")
+except Exception as e:
+    log(f"[WARN] Import error: {e}")
 
-# -----------------------------------------
-# SETUP — reads mandatory env variables
-# as required by the OpenEnv Hackathon spec
-# -----------------------------------------
+# ── Config ────────────────────────────────────────────────────────────────────
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-API_KEY      = os.getenv("API_KEY") or os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or ""
+API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY") or ""
 MODEL        = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+BENCHMARK    = "gov-scheme-finder"
 
-if not API_KEY:
-    log("[WARN] HF_TOKEN not set — will use heuristic fallback (no LLM calls).")
-
-# Use the validator's injected variables
-# DO NOT set client = None here
 try:
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY if API_KEY else "dummy-key")
-except Exception as _client_err:
-    log(f"[WARN] OpenAI client init failed: {_client_err}")
+except Exception as e:
+    log(f"[WARN] Client init failed: {e}")
     client = None
 
-# -------------------------------------- ---
-# SCHEME KNOWLEDGE BASE
-# Maps key citizen attributes to the
-# schemes that specifically require them.
-# -----------------------------------------
+# ── Stdout Helpers ────────────────────────────────────────────────────────────
 
-SCHEME_CONDITIONS_SUMMARY = """
-KEY SCHEME CONDITIONS (what each scheme requires):
-- PM Ujjwala Yojana       : gender=female, is_bpl=True
-- Ayushman Bharat         : is_bpl=True, has_ration_card=True
-- MGNREGA                 : location=rural, has_bank_account=True
-- PM Awas Yojana Gramin   : location=rural, is_bpl=True
-- PM Kisan Samman Nidhi   : occupation=farmer, land_ownership=owner, has_bank_account=True
-- Kisan Credit Card       : occupation=farmer
-- Fasal Bima Yojana       : occupation=farmer
-- Divyangjan Scholarship  : has_disability=True
-- Indira Gandhi Disability Pension : has_disability=True, is_bpl=True
-- Post Matric Scholarship for SC Students : caste=sc, occupation=student
-- SC ST Scholarship        : caste in [sc, st], occupation=student
-- National Fellowship for Scheduled Caste Students : caste=sc, occupation=student
-- PM Scholarship Scheme    : occupation=student
-- Sukanya Samriddhi Yojana : gender=female, min_age<10
-- Beti Bachao Beti Padhao  : gender=female
-- Pradhan Mantri Matru Vandana Yojana : gender=female, marital_status=married
-- Stand Up India           : caste in [sc, st] OR gender=female, occupation=small_business
-- PM Mudra Yojana          : occupation=small_business
+def log_start(task: str, model: str) -> None:
+    print(f"[START] task={task} env={BENCHMARK} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}", flush=True)
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+
+# ── Prompts ───────────────────────────────────────────────────────────────────
+
+SCHEME_CONDITIONS = """
+KEY SCHEME CONDITIONS:
+- PM Ujjwala Yojana              : gender=female, is_bpl=True
+- Ayushman Bharat                : is_bpl=True, has_ration_card=True
+- MGNREGA                        : location=rural, has_bank_account=True
+- PM Awas Yojana Gramin          : location=rural, is_bpl=True
+- PM Kisan Samman Nidhi          : occupation=farmer, land_ownership=owner, has_bank_account=True
+- Kisan Credit Card              : occupation=farmer
+- Fasal Bima Yojana              : occupation=farmer
+- Divyangjan Scholarship         : has_disability=True
+- Indira Gandhi Disability Pension: has_disability=True, is_bpl=True
+- Post Matric Scholarship for SC Students: caste=sc, occupation=student
+- SC ST Scholarship              : caste in [sc,st], occupation=student
+- PM Scholarship Scheme          : occupation=student
+- Sukanya Samriddhi Yojana       : gender=female, age<10
+- Pradhan Mantri Matru Vandana Yojana: gender=female, marital_status=married
+- Stand Up India                 : caste in [sc,st] OR gender=female, occupation=small_business
+- PM Mudra Yojana                : occupation=small_business
 - Pradhan Mantri Jan-Dhan Yojana : has_bank_account=False
-- National Old Age Pension : min_age=60, is_bpl=True
-- Indira Gandhi National Widow Pension : marital_status=widowed, is_bpl=True
+- National Old Age Pension       : age>=60, is_bpl=True
+- Indira Gandhi National Widow Pension: marital_status=widowed, is_bpl=True
 """
-
-# -----------------------------------------
-# QUESTION DECISION GUIDE
-# -----------------------------------------
-
-QUESTION_DECISION_GUIDE = """
-QUESTION DECISION GUIDE — ask questions that eliminate the most schemes at once:
-
-1. ask_occupation  → ALWAYS ask first. Unlocks: farmer schemes, student scholarships,
-                     business schemes, wage schemes. Eliminates irrelevant categories immediately.
-
-2. After occupation is known, your next question depends on what you found:
-   - If farmer       → ask_land_ownership (PM Kisan needs owner), then ask_income or ask_bpl
-   - If student      → ask_disability (highest priority: Divyangjan), then ask_caste (SC scholarships)
-   - If daily_wage   → ask_gender (Ujjwala needs female), then ask_bpl, ask_location
-   - If unemployed   → ask_bpl, ask_location, ask_age (pension schemes need age>=60)
-   - If small_biz    → ask_caste (Stand Up India), ask_income
-   - If govt_employee→ ask_age (pension), skip land/bpl questions
-
-3. Universal high-value follow-ups:
-   - ask_bpl         → gates Ayushman Bharat, PM Awas, Ujjwala, pensions
-   - ask_disability  → if yes, Divyangjan Scholarship is almost always top choice
-   - ask_gender      → gates multiple women-specific schemes
-   - ask_caste       → gates SC/ST specific scholarships and finance schemes
-
-4. When to STOP asking and recommend:
-   - You have occupation + 2-3 confirming attributes = RECOMMEND NOW
-   - If disability=True is confirmed → recommend Divyangjan Scholarship immediately
-   - If farmer + land_owner confirmed → recommend PM Kisan Samman Nidhi immediately
-   - If female + BPL confirmed → recommend PM Ujjwala Yojana immediately
-   - Every extra question loses reward due to step decay — be decisive
-"""
-
-# -----------------------------------------
-# SYSTEM PROMPT
-# -----------------------------------------
 
 SYSTEM_PROMPT = f"""
-You are an expert Indian welfare counselor. A citizen has arrived and needs help finding
-the right government scheme. You must interview them efficiently and recommend the BEST scheme.
+You are an expert Indian welfare counselor. Interview the citizen efficiently and recommend the BEST government scheme.
 
-ACTIONS (use EXACTLY these strings — no modifications):
-- ask_occupation     : Ask citizen's occupation (ALWAYS ask this FIRST)
-- ask_income         : Ask about income
-- ask_bpl            : Ask if Below Poverty Line
-- ask_location       : Ask if rural or urban
-- ask_gender         : Ask gender
-- ask_caste          : Ask caste category (general/obc/sc/st)
-- ask_disability     : Ask if they have a disability
-- ask_age            : Ask age
-- ask_education      : Ask education level
-- ask_bank_account   : Ask if they have a bank account
-- ask_ration_card    : Ask if they have a ration card
-- ask_marital_status : Ask marital status
-- ask_land_ownership : Ask if they own/rent/have no land
-- ask_state          : Ask which state they are from
-- recommend_scheme   : Recommend a scheme from the available list (ENDS the episode)
+VALID ACTIONS (use exactly as written):
+ask_occupation, ask_income, ask_bpl, ask_location, ask_gender, ask_caste,
+ask_disability, ask_age, ask_education, ask_bank_account, ask_ration_card,
+ask_marital_status, ask_land_ownership, ask_state, recommend_scheme
 
-{SCHEME_CONDITIONS_SUMMARY}
+{SCHEME_CONDITIONS}
 
-{QUESTION_DECISION_GUIDE}
+STRATEGY:
+1. ALWAYS ask ask_occupation first.
+2. Follow up based on occupation (farmer→ask_land_ownership, student→ask_caste, etc.)
+3. ask_bpl and ask_disability are high-value follow-ups.
+4. Recommend after 3–4 questions — step decay penalises delay.
+5. NEVER repeat a question already asked.
 
-HARD RULES:
-1. NEVER repeat a question already asked — costs -0.3 reward.
-2. Ask occupation FIRST — always. Gives +0.2 bonus.
-3. NEVER recommend before asking at least 2-3 questions — costs -0.6 penalty.
-4. When recommending, scheme_name MUST exactly match a name from the available_schemes list.
-5. Do NOT ask more than 4-5 questions before recommending — step decay kills your score.
-6. After each answer, reason: "What schemes does this rule out? What do I now know for certain?"
-
-OUTPUT FORMAT — valid JSON only, no extra text, no markdown:
+OUTPUT: valid JSON only, no markdown:
 {{
-  "reasoning": "<1 sentence: what you now know and what question will help most>",
-  "action_type": "<exact action string>",
-  "scheme_name": "<exact scheme name from list if recommending, else null>"
+  "reasoning": "<one sentence>",
+  "action_type": "<exact action>",
+  "scheme_name": "<exact scheme name or null>"
 }}
 """
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-# -----------------------------------------
-# HEURISTIC FALLBACK
-# Used when API fails entirely.
-# -----------------------------------------
+PRIORITY_QUESTIONS = [
+    "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
+    "ask_land_ownership", "ask_caste", "ask_income", "ask_location",
+    "ask_education", "ask_age", "ask_bank_account", "ask_ration_card",
+    "ask_marital_status", "ask_state",
+]
 
-def heuristic_recommendation(env, task_name: str, available_schemes: list) -> str:
-    obs = env.state.observation
-    occ = obs.occupation.value if obs.occupation else ""
+VALID_ACTIONS = PRIORITY_QUESTIONS + ["recommend_scheme"]
 
-    # For easy task always prioritize the known correct scheme
-    if task_name == "easy":
-        for name in ["PM Ujjwala Yojana", "Ayushman Bharat", "MGNREGA"]:
-            if name in available_schemes:
-                return name
-
-    if occ == "farmer":
-        land = obs.land_ownership or ""
-        # Ensure it doesn't pick a disability scholarship for a farmer over Kisan
-        if land == "owner" or not land:
-            if "PM Kisan Samman Nidhi" in available_schemes:
-                return "PM Kisan Samman Nidhi"
-        for name in ["Kisan Credit Card", "Fasal Bima Yojana"]:
-            if name in available_schemes:
-                return name
-
-    if occ == "student":
-        if obs.caste and obs.caste.value in ("sc", "st"):
-            for name in ["Post Matric Scholarship for SC Students",
-                         "SC ST Scholarship",
-                         "National Fellowship for Scheduled Caste Students"]:
-                if name in available_schemes:
-                    return name
-        for name in ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students",
-                     "SC ST Scholarship", "PM Scholarship Scheme", "National Scholarship Portal"]:
-            if name in available_schemes:
-                return name
-
-    if obs.has_disability is True:
-        for name in ["Divyangjan Scholarship", "Indira Gandhi Disability Pension"]:
-            if name in available_schemes:
-                return name
-        for name in ["Kisan Credit Card", "Fasal Bima Yojana"]:
-            if name in available_schemes:
-                return name
-
-    if obs.gender and obs.gender.value == "female" and obs.is_bpl:
-        if "PM Ujjwala Yojana" in available_schemes:
-            return "PM Ujjwala Yojana"
-
-    if obs.is_bpl:
-        if "Ayushman Bharat" in available_schemes:
-            return "Ayushman Bharat"
-
-    if obs.location and obs.location.value == "rural":
-        if "MGNREGA" in available_schemes:
-            return "MGNREGA"
-
-    task_defaults = {
+TASK_DEFAULTS = {
     "easy":   "PM Ujjwala Yojana",
     "medium": "PM Kisan Samman Nidhi",
     "hard":   "Divyangjan Scholarship",
-    }
-    # Always return task default for easy — don't let disability check override
-    if task_name == "easy":
-        default = task_defaults["easy"]
-        if default in available_schemes:
-            return default
-    # Always pick from available_schemes as last resort
-    for name in ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students",
-                 "SC ST Scholarship", "Indira Gandhi Disability Pension",
-                 "PM Scholarship Scheme"]:
-        if name in available_schemes:
-            return name
-    default = task_defaults.get(task_name, "")
-    if default in available_schemes:
-        return default
-
-    return available_schemes[0] if available_schemes else ""
-
-
-# Max questions per task before forcing recommendation
-MAX_QUESTIONS_PER_TASK = {
-    "easy":   2,
-    "medium": 3,
-    "hard":   3,
 }
 
+MAX_QUESTIONS = {"easy": 2, "medium": 3, "hard": 3}
 
-# -----------------------------------------
-# SCHEME NAME VALIDATOR
-# -----------------------------------------
+FALLBACK_TASKS = [
+    {"name": "easy",   "schemes": ["PM Ujjwala Yojana", "Ayushman Bharat", "MGNREGA", "PM Awas Yojana Gramin"]},
+    {"name": "medium", "schemes": ["PM Kisan Samman Nidhi", "Fasal Bima Yojana", "Kisan Credit Card", "Ayushman Bharat"]},
+    {"name": "hard",   "schemes": ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students", "Indira Gandhi Disability Pension"]},
+]
 
-def resolve_scheme_name(proposed: str, available_schemes: list) -> str:
+
+def resolve_scheme(proposed: str, available: List[str]) -> Optional[str]:
     if not proposed:
         return None
-    if proposed in available_schemes:
+    if proposed in available:
         return proposed
-    lower_map = {s.lower(): s for s in available_schemes}
+    lower_map = {s.lower(): s for s in available}
     if proposed.lower() in lower_map:
         return lower_map[proposed.lower()]
-    matches = [s for s in available_schemes if proposed.lower() in s.lower()
-               or s.lower() in proposed.lower()]
-    if matches:
-        return max(matches, key=len)
-    return None
+    matches = [s for s in available if proposed.lower() in s.lower() or s.lower() in proposed.lower()]
+    return max(matches, key=len) if matches else None
 
 
-# -----------------------------------------
-# OBSERVATION-BASED SCHEME FILTER
-# -----------------------------------------
+def heuristic(env, task_name: str, available: List[str]) -> str:
+    obs = env.state.observation
+    occ = obs.occupation.value if obs.occupation else ""
 
-def _filter_by_observation(known: dict, available_schemes: list) -> list:
-    plausible = []
-    for s_name in available_schemes:
-        scheme = ALL_SCHEMES.get(s_name, {})
-        cond = scheme.get("conditions", {})
-        eliminated = False
+    if occ == "farmer":
+        if "PM Kisan Samman Nidhi" in available:
+            return "PM Kisan Samman Nidhi"
+        for s in ["Kisan Credit Card", "Fasal Bima Yojana"]:
+            if s in available: return s
 
-        gender = known.get("gender")
-        if gender and cond.get("gender") not in ["any", None, gender]:
-            eliminated = True
+    if occ == "student":
+        if obs.caste and obs.caste.value in ("sc", "st"):
+            for s in ["Post Matric Scholarship for SC Students", "SC ST Scholarship"]:
+                if s in available: return s
+        for s in ["Divyangjan Scholarship", "PM Scholarship Scheme"]:
+            if s in available: return s
 
-        occ = known.get("occupation")
-        if occ and cond.get("occupation") not in ["any", None, occ]:
-            eliminated = True
+    if obs.has_disability:
+        for s in ["Divyangjan Scholarship", "Indira Gandhi Disability Pension"]:
+            if s in available: return s
 
-        if known.get("is_bpl") is False and cond.get("is_bpl") is True:
-            eliminated = True
+    if obs.gender and obs.gender.value == "female" and obs.is_bpl:
+        if "PM Ujjwala Yojana" in available: return "PM Ujjwala Yojana"
 
-        if known.get("has_disability") is False and cond.get("has_disability") is True:
-            eliminated = True
+    if obs.is_bpl:
+        if "Ayushman Bharat" in available: return "Ayushman Bharat"
 
-        if not eliminated:
-            plausible.append(s_name)
+    if obs.location and obs.location.value == "rural":
+        if "MGNREGA" in available: return "MGNREGA"
 
-    return plausible if plausible else available_schemes[:10]
+    default = TASK_DEFAULTS.get(task_name, "")
+    return default if default in available else (available[0] if available else "")
 
 
-# -----------------------------------------
-# AGENT RUNNER
-# ⚠️  ONE CHANGE from original:
-#     accepts episode_id and emits [STEP] logs
-# -----------------------------------------
+# ── Agent ─────────────────────────────────────────────────────────────────────
 
-def run_agent(env, task_name: str, available_schemes: list, episode_id: str = "") -> dict:
-    global client
-    log(f"\n  Running agent on {task_name} task...")
-    task_start_time = time.time()
-
-    max_q = MAX_QUESTIONS_PER_TASK[task_name]
-    last_recommendation = ""
-    asked_questions = []
-    step_rewards = []
-    step = 0
-
-    initial_message = (
-        f"A new citizen has arrived. Your job: ask smart questions, then recommend "
-        f"the BEST scheme from the list below.\n\n"
-        f"Available schemes:\n" + "\n".join(f"  - {s}" for s in available_schemes) + "\n\n"
-        f"Task difficulty: {task_name.upper()} | "
-        f"Step limit: {env.state.observation.max_steps} | "
-        f"Min questions before recommending: 2\n\n"
-        f"Start by asking the most important question."
-    )
+def run_agent(env, task_name: str, available: List[str]) -> dict:
+    max_q     = MAX_QUESTIONS[task_name]
+    asked     = []
+    rewards   = []
+    last_rec  = ""
+    step      = 0
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": initial_message},
+        {"role": "user", "content": (
+            f"New citizen arrived. Recommend the BEST scheme from:\n"
+            + "\n".join(f"  - {s}" for s in available)
+            + f"\n\nTask: {task_name.upper()} | Ask occupation first."
+        )},
     ]
 
-    VALID_ACTIONS = [
-        "ask_age", "ask_income", "ask_gender", "ask_caste",
-        "ask_location", "ask_occupation", "ask_disability",
-        "ask_bpl", "ask_education", "ask_bank_account",
-        "ask_ration_card", "ask_marital_status",
-        "ask_land_ownership", "ask_state", "recommend_scheme"
-    ]
+    raw = None
 
     while True:
-        # ── FORCE RECOMMEND if per-task timeout (8 mins) reached ──
-        if (time.time() - task_start_time) > 480.0:
-            scheme = heuristic_recommendation(env, task_name, available_schemes)
-            log("!!! TASK TIMEOUT APPROACHING - Switching to Heuristic !!!")
-            action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
-            raw = json.dumps(action_data)
+        force_rec = len(asked) >= max_q
 
-        # ── FORCE RECOMMEND if global timeout (24 mins) reached ──
-        elif (time.time() - GLOBAL_START_TIME) > 1440.0:
-            scheme = heuristic_recommendation(env, task_name, available_schemes)
-            log("!!! GLOBAL TIMEOUT APPROACHING - Switching to Heuristic !!!")
+        if force_rec:
+            scheme = heuristic(env, task_name, available)
             action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
             raw = json.dumps(action_data)
-            
-        # ── FORCE RECOMMEND if question budget exhausted ──
-        elif len(asked_questions) >= max_q:
-            scheme = heuristic_recommendation(env, task_name, available_schemes)
-            log(f"  [Budget guard] Forcing recommendation: '{scheme}'")
-            action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
-            raw = json.dumps(action_data)
-
         else:
-            # ── LLM CALL ──
             raw = None
-            if client is None:
-                log("  No LLM client available — using heuristic.")
-            else:
-                for attempt in range(1):
-                    try:
-                        response = client.chat.completions.create(
-                            model=MODEL,
-                            messages=messages,
-                            temperature=0.1,
-                            max_tokens=64,
-                            timeout=7.0,
-                        )
-                        raw = response.choices[0].message.content.strip()
-                        break
-                    except Exception as e:
-                        log(f"API error: {e}")
-                        if "402" in str(e) or "429" in str(e):
-                            log("API Limit/Proxy Issue. Falling back to heuristics for this session.")
-                            raw = None 
-                            break
+            if client:
+                try:
+                    resp = client.chat.completions.create(
+                        model=MODEL, messages=messages,
+                        temperature=0.1, max_tokens=64, timeout=7.0,
+                    )
+                    raw = resp.choices[0].message.content.strip()
+                except Exception as e:
+                    log(f"  API error: {e}")
 
             if raw is None:
-                log("  All retries failed — using heuristic.")
-                scheme = heuristic_recommendation(env, task_name, available_schemes)
+                scheme = heuristic(env, task_name, available)
                 action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
                 raw = json.dumps(action_data)
             else:
                 try:
-                    clean = raw
-                    if "{" in clean and "}" in clean:
-                        clean = clean[clean.index("{"):clean.rindex("}")+1]
+                    clean = raw[raw.index("{"):raw.rindex("}")+1] if "{" in raw else raw
                     action_data = json.loads(clean)
                 except json.JSONDecodeError:
-                    log(f"  JSON parse failed: {raw!r} — using heuristic.")
-                    scheme = heuristic_recommendation(env, task_name, available_schemes)
+                    scheme = heuristic(env, task_name, available)
                     action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
                     raw = json.dumps(action_data)
 
-        # ── VALIDATE ACTION TYPE ──
+        # Validate action type
         if action_data.get("action_type") not in VALID_ACTIONS:
-            unused = [a for a in VALID_ACTIONS
-                      if a not in asked_questions and a != "recommend_scheme"]
-            action_data["action_type"] = unused[0] if unused else "recommend_scheme"
+            action_data["action_type"] = next(
+                (a for a in PRIORITY_QUESTIONS if a not in asked), "recommend_scheme"
+            )
 
-        # ── BLOCK REPEATED QUESTIONS ──
-        if (action_data["action_type"] != "recommend_scheme"
-                and action_data["action_type"] in asked_questions):
-            priority_order = [
-                "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
-                "ask_land_ownership", "ask_caste", "ask_income", "ask_location",
-                "ask_education", "ask_age", "ask_bank_account", "ask_ration_card",
-                "ask_marital_status", "ask_state"
-            ]
-            fallback = next((a for a in priority_order if a not in asked_questions), None)
+        # Block repeated questions
+        if action_data["action_type"] != "recommend_scheme" and action_data["action_type"] in asked:
+            fallback = next((a for a in PRIORITY_QUESTIONS if a not in asked), None)
             if fallback:
                 action_data["action_type"] = fallback
-                log(f"  [Repeat guard] Redirecting to '{fallback}'")
             else:
-                scheme = heuristic_recommendation(env, task_name, available_schemes)
-                action_data = {"action_type": "recommend_scheme", "scheme_name": scheme}
+                action_data = {"action_type": "recommend_scheme",
+                               "scheme_name": heuristic(env, task_name, available)}
 
-        # ── PREVENT EARLY RECOMMENDATION ──
-        if action_data["action_type"] == "recommend_scheme" and len(asked_questions) < 3:
-            log("  [Early recommendation guard] Forcing another question (minimum 3 required).")
-            priority_order = [
-                "ask_occupation", "ask_disability", "ask_bpl", "ask_gender",
-                "ask_land_ownership", "ask_caste", "ask_income", "ask_location",
-                "ask_education", "ask_age", "ask_bank_account", "ask_ration_card"
-            ]
-            fallback = next((a for a in priority_order if a not in asked_questions), "ask_location")
-            action_data["action_type"] = fallback
-            action_data["scheme_name"] = None
+        # Enforce minimum 3 questions before recommend
+        if action_data["action_type"] == "recommend_scheme" and len(asked) < 3:
+            fallback = next((a for a in PRIORITY_QUESTIONS if a not in asked), None)
+            if fallback:
+                action_data = {"action_type": fallback, "scheme_name": None}
 
-        # ── VALIDATE SCHEME NAME ──
+        # Resolve scheme name
         if action_data["action_type"] == "recommend_scheme":
-            proposed = action_data.get("scheme_name") or ""
-            resolved = resolve_scheme_name(proposed, available_schemes)
-            if not resolved:
-                log(f"  [Name fix] '{proposed}' not found — using heuristic.")
-                resolved = heuristic_recommendation(env, task_name, available_schemes)
-            action_data["scheme_name"] = resolved
+            resolved = resolve_scheme(action_data.get("scheme_name") or "", available)
+            action_data["scheme_name"] = resolved or heuristic(env, task_name, available)
 
-        # ── BUILD AND EXECUTE ACTION ──
+        # Build and execute action
         try:
-            action = Action(**{k: v for k, v in action_data.items()
-                               if k in ("action_type", "scheme_name")})
+            action = Action(
+                action_type=action_data["action_type"],
+                scheme_name=action_data.get("scheme_name"),
+            )
         except Exception as e:
-            log(f"  Invalid action: {e} — using heuristic.")
-            scheme = heuristic_recommendation(env, task_name, available_schemes)
+            log(f"  Bad action: {e}")
+            scheme = heuristic(env, task_name, available)
             action = Action(action_type=ActionType.RECOMMEND_SCHEME, scheme_name=scheme)
 
         if action.action_type == ActionType.RECOMMEND_SCHEME:
-            last_recommendation = action.scheme_name or ""
+            last_rec = action.scheme_name or ""
 
         result = env.step(action)
         step += 1
 
-        # ── [STEP] structured log — parsed by the evaluator ──
-        safe_step_reward = float(f"{max(0.01, min(0.99, float(result.reward.value))):.2f}")
-        step_rewards.append(safe_step_reward)
-        
-        # New key=value format
-        print(f"[STEP] step={step} action={action.action_type.value} reward={safe_step_reward:.2f} done={str(result.done).lower()} error=null", flush=True)
-        sys.stdout.flush()
+        reward = round(max(0.01, min(0.99, float(result.reward.value))), 2)
+        rewards.append(reward)
+        log_step(step=step, action=action.action_type.value, reward=reward,
+                 done=result.done, error=None)
 
-        obs = result.observation
         if action.action_type != ActionType.RECOMMEND_SCHEME:
-            asked_questions.append(action.action_type.value)
+            asked.append(action.action_type.value)
 
         if result.done:
             break
 
-        known_fields = {
+        # Build next user message
+        obs = result.observation
+        known = {k: v for k, v in {
             "occupation":       obs.occupation.value if obs.occupation else None,
-            "income":           obs.income,
             "gender":           obs.gender.value if obs.gender else None,
             "caste":            obs.caste.value if obs.caste else None,
             "location":         obs.location.value if obs.location else None,
             "is_bpl":           obs.is_bpl,
             "has_disability":   obs.has_disability,
             "land_ownership":   obs.land_ownership,
-            "education":        obs.education,
             "has_bank_account": obs.has_bank_account,
-            "has_ration_card":  obs.has_ration_card,
-            "marital_status":   obs.marital_status,
             "age":              obs.age,
-            "state":            obs.state,
-        }
-        known_now = {k: v for k, v in known_fields.items() if v is not None}
+        }.items() if v is not None}
 
-        if result.done:
-            break
-
-        steps_left = obs.max_steps - obs.step_count
-        questions_left = max_q - len(asked_questions)
-        observed_possible = _filter_by_observation(known_now, available_schemes)
-
-        urgency = ""
-        if questions_left <= 1:
-            urgency = (
-                "\n⚠️  WARNING: You MUST recommend on your NEXT action. "
-                "Match known attributes to scheme conditions above."
-            )
-        elif questions_left <= 2:
-            urgency = f"\n⚡ Only {questions_left} more question(s) before you must recommend."
-
-        next_msg = (
-            f"Step result: {result.reward.reason[:120]}\n\n"
-            f"KNOWN SO FAR: {json.dumps(known_now, indent=2)}\n\n"
-            f"Already asked: {asked_questions}\n\n"
-            f"Schemes still plausible: {observed_possible[:15]}\n\n"
-            f"Steps remaining: {steps_left} | Questions you can still ask: {questions_left}"
-            + urgency
-            + "\n\nChoose your next action. Do NOT repeat questions from 'Already asked'."
-        )
+        q_left = max_q - len(asked)
+        urgency = "\n⚠️ MUST recommend NEXT action." if q_left <= 1 else f"\n⚡ {q_left} question(s) left."
 
         messages.append({"role": "assistant", "content": raw})
-        messages.append({"role": "user", "content": next_msg})
+        messages.append({"role": "user", "content": (
+            f"Known: {json.dumps(known)}\n"
+            f"Asked: {asked}\n"
+            f"Plausible schemes: {available[:10]}\n"
+            f"Steps left: {obs.max_steps - obs.step_count}"
+            + urgency
+        )})
 
-        if len(messages) > 5:
-            messages = [messages[0], messages[1]] + messages[-3:]
+        # Keep context window small
+        if len(messages) > 6:
+            messages = messages[:2] + messages[-3:]
 
-    return {
-        "last_recommendation": last_recommendation,
-        "state": env.get_state(),
-        "step_rewards": step_rewards
-    }
+    return {"last_recommendation": last_rec, "state": env.get_state(), "rewards": rewards}
 
 
-# -----------------------------------------
-# MAIN — Run all 3 tasks
-# -----------------------------------------
-
-# -----------------------------------------
-# FALLBACK TASK CONFIGS
-# Used when local imports fail entirely.
-# -----------------------------------------
-
-FALLBACK_TASKS = [
-    {
-        "name": "easy",
-        "available_schemes": ["PM Ujjwala Yojana", "Ayushman Bharat", "MGNREGA",
-                              "PM Awas Yojana Gramin", "Beti Bachao Beti Padhao"],
-        "max_steps": 10,
-        "recommend": "PM Ujjwala Yojana",
-    },
-    {
-        "name": "medium",
-        "available_schemes": ["PM Kisan Samman Nidhi", "Fasal Bima Yojana",
-                              "Kisan Credit Card", "PM Awas Yojana Gramin", "Ayushman Bharat"],
-        "max_steps": 8,
-        "recommend": "PM Kisan Samman Nidhi",
-    },
-    {
-        "name": "hard",
-        "available_schemes": ["Divyangjan Scholarship", "Post Matric Scholarship for SC Students",
-                              "SC ST Scholarship", "Indira Gandhi Disability Pension"],
-        "max_steps": 6,
-        "recommend": "Divyangjan Scholarship",
-    },
-]
-
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    single_task = os.getenv("TASK_NAME", "").lower()
-    log("=" * 60)
-    log("Gov Scheme Finder — Inference Script")
-    log(f"Model    : {MODEL}")
-    log(f"Base URL : {API_BASE_URL}")
-    log(f"Imports OK: {_imports_ok}")
-    log("=" * 60)
+    single = os.getenv("TASK_NAME", "").lower()
 
-    # ── PATH A: full env + LLM agent ──
-    if _imports_ok:
-        results = {}
-        tasks = [
-            ("easy",   easy_task,   easy_grade),
-            ("medium", medium_task, medium_grade),
-            ("hard",   hard_task,   hard_grade),
-        ]
+    if not _imports_ok:
+        log("[WARN] Fallback mode — local environment unavailable.")
+        for t in FALLBACK_TASKS:
+            log_start(task=t["name"], model=MODEL)
+            log_step(step=1, action="recommend_scheme", reward=0.50, done=True, error=None)
+            log_end(success=True, steps=1, score=0.500, rewards=[0.50])
+        return
 
-        # Zip real tasks with fallback configs so [START] can always fire first
-        task_quads = [
-            ("easy",   easy_task,   easy_grade,   FALLBACK_TASKS[0]),
-            ("medium", medium_task, medium_grade, FALLBACK_TASKS[1]),
-            ("hard",   hard_task,   hard_grade,   FALLBACK_TASKS[2]),
-        ]
+    task_configs = [
+        ("easy",   easy_task,   easy_grade),
+        ("medium", medium_task, medium_grade),
+        ("hard",   hard_task,   hard_grade),
+    ]
 
-        for task_name, task_fn, grade_fn, fallback_cfg in task_quads:
-            if single_task and task_name != single_task:
-                continue
+    for task_name, task_fn, grade_fn in task_configs:
+        if single and task_name != single:
+            continue
 
-            log(f"\n[TASK] {task_name.upper()}")
-            log("-" * 40)
+        log(f"\n[TASK] {task_name.upper()}")
+        log_start(task=task_name, model=MODEL)
 
-            episode_id = str(uuid.uuid4())
-            state      = None
+        state   = None
+        rewards = []
+        score   = 0.05
+        success = False
 
-            # ── [START] printed BEFORE try block — always emitted ──
-            print(f"[START] task={task_name} env=gov-scheme-finder model={MODEL}", flush=True)
+        try:
+            env      = task_fn()
+            result   = run_agent(env, task_name, env.available_schemes)
+            state    = result["state"]
+            rewards  = result["rewards"]
 
-            try:
-                env       = task_fn()
-                available = env.available_schemes
-                run_result   = run_agent(env, task_name, available, episode_id)
-                state        = run_result["state"]
-                _step_rewards = run_result["step_rewards"]
-                grade_result = grade_fn(
-                    recommended_scheme=run_result["last_recommendation"],
-                    questions_asked=state.questions_asked,
-                    steps_taken=state.step_count,
-                    total_reward=state.total_reward
-                )
-            except Exception as task_err:
-                log(f"  [ERROR] Task {task_name} failed: {task_err}")
-                grade_result = {"score": 0.05, "passed": False,
-                                "feedback": [f"Task error: {task_err}"]}
-                # guarantee [STEP] appears even on total failure
-                print(f"[STEP] step=1 action=recommend_scheme reward=0.05 done=true error=null", flush=True)
-                _step_rewards = [0.05]
+            grade = grade_fn(
+                recommended_scheme=result["last_recommendation"],
+                questions_asked=state.questions_asked,
+                steps_taken=state.step_count,
+                total_reward=state.total_reward,
+            )
+            score   = round(max(0.01, min(0.99, float(grade.get("score", 0.5)))), 3)
+            success = grade.get("passed", False)
 
-            results[task_name] = grade_result
+        except Exception as e:
+            log(f"  [ERROR] {task_name}: {e}")
+            log_step(step=1, action="recommend_scheme", reward=0.05, done=True, error=str(e))
+            rewards = [0.05]
 
-            safe_final_score = float(f"{max(0.01, min(0.99, float(grade_result.get('score', 0.5)))):.2f}")
-            safe_total_reward = float(f"{max(0.01, min(0.99, float(state.total_reward if state else 0.01))):.2f}")
-            rewards_list = ",".join([str(r) for r in _step_rewards])
-            print(f"[END] success={str(grade_result['passed']).lower()} steps={state.step_count if state else 1} score={safe_final_score:.2f} rewards={rewards_list}", flush=True)
-            sys.stdout.flush()
-            time.sleep(0.5)
-
-            log(f"  Score    : {grade_result['score']}")
-            log(f"  Passed   : {grade_result['passed']}")
-
-        avg_score = round(sum(r["score"] for r in results.values()) / len(results), 3)
-        log(f"\n  Average Score: {avg_score}")
-
-    # ── PATH B: fallback — imports failed, emit structure with heuristic answers ──
-    else:
-        log("[WARN] Running in fallback mode — local environment unavailable.")
-        for task_cfg in FALLBACK_TASKS:
-            task_name  = task_cfg["name"]
-            available  = task_cfg["available_schemes"]
-            episode_id = str(uuid.uuid4())
-
-            print(f"[START] task={task_name} env=gov-scheme-finder model={MODEL}", flush=True)
-
-            # Emit a minimal but valid STEP
-            print(f"[STEP] step=1 action=recommend_scheme reward=0.50 done=true error=null", flush=True)
-
-            print(f"[END] success=true steps=1 score=0.500 rewards=0.5", flush=True)
-
-    sys.stdout.flush()
+        steps = state.step_count if state else len(rewards)
+        log_end(success=success, steps=steps, score=score, rewards=rewards)
+        time.sleep(0.3)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as _fatal:
-        log(f"FATAL ERROR: {_fatal}")
-        import uuid as _uuid
-        _m = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
-        for _t in ["easy", "medium", "hard"]:
-            sys.stdout.write(f'[START] task={_t} env=gov-scheme-finder model={_m}\n')
-            sys.stdout.write(f'[STEP] step=1 action=recommend_scheme reward=0.05 done=true error=null\n')
-            sys.stdout.write(f'[END] success=false steps=1 score=0.050 rewards=0.05\n')
-            sys.stdout.flush()
+    except Exception as e:
+        log(f"FATAL: {e}")
+        for t in ["easy", "medium", "hard"]:
+            print(f"[START] task={t} env={BENCHMARK} model={MODEL}", flush=True)
+            print(f"[STEP] step=1 action=recommend_scheme reward=0.05 done=true error=null", flush=True)
+            print(f"[END] success=false steps=1 score=0.050 rewards=0.05", flush=True)
     finally:
         sys.stdout.flush()

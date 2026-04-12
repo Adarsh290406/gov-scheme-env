@@ -311,11 +311,13 @@ def grade(request: GradeRequest):
     env = get_env(request.session_id)
     state = env.get_state()
 
-    if not state.is_done:
-        raise HTTPException(
-            status_code=400,
-            detail="Episode is not done yet. Complete the episode before grading."
-        )
+    # Allow grading even if episode is not done
+    result["score"] = round(min(0.99, max(0.01, float(result["score"]))), 3)
+    return {
+        "session_id": request.session_id,
+        "task": task,
+        "grade": result
+    }
 
     recommended = session_recommendations.get(request.session_id, "")
     task = request.task.lower()

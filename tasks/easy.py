@@ -3,7 +3,7 @@ TASK 1 — EASY
 =============
 Citizen: Rural BPL woman, daily wage worker
 Schemes: 10 | Max steps: 10
-Expected score: 0.7 to 1.0
+Expected score: 0.7 to 0.99
 """
 
 import sys

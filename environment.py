@@ -690,7 +690,7 @@ class GovSchemeEnvironment:
             info["timeout"] = True
             info["correct_schemes"] = citizen.correct_schemes
 
-        # Hard clamp: reward is always strictly in (0.0, 1.0) BEFORE accumulation
+        # Hard clamp: reward is always strictly in (0.01, 0.99) BEFORE accumulation
         reward_value = round(max(0.01, min(0.99, reward_value)), 3)
 
         # ── Update totals ──

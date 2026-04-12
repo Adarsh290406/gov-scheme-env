@@ -167,7 +167,7 @@ Model: `llama-3.1-8b-instant` via Groq (OpenAI-compatible)
 
 | Task        | Score    | Passed  |
 |-------------|----------|---------|
-| Easy        | 1.0      | ✅      |
+| Easy        | 0.99     | ✅      |
 | Medium      | 0.9      | ✅      |
 | Hard        | 0.95     | ✅      |
 | **Average** | **0.95** | ✅      |

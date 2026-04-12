@@ -483,7 +483,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
               + f" | Reward: {result.reward.value:.3f}")
 
         # ── [STEP] structured log — parsed by the evaluator ──
-        safe_reward = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
+        safe_step_reward = float(f"{max(0.05, min(0.95, float(result.reward.value))):.2f}")
         _step_data = {
             "event":       "STEP",
             "episode_id":  episode_id,
@@ -491,7 +491,7 @@ def run_agent(env, task_name: str, available_schemes: list, episode_id: str = ""
             "step":        step,
             "action":      action.action_type.value,
             "scheme_name": action.scheme_name if action.action_type == ActionType.RECOMMEND_SCHEME else None,
-            "reward":      safe_reward,
+            "reward":      safe_step_reward,
             "reason":      result.reward.reason,
             "done":        result.done,
         }
@@ -656,11 +656,11 @@ def main():
 
             results[task_name] = grade_result
 
-            safe_score = float(f"{max(0.05, min(0.95, float(grade_result['score']))):.2f}")
+            safe_final_score = float(f"{max(0.05, min(0.95, float(grade_result['score']))):.2f}")
             safe_total_reward = float(f"{max(0.05, min(0.95, float(state.total_reward if state else 0.05))):.2f}")
             _end_data = {
                 "event": "END", "task": task_name, "episode_id": episode_id,
-                "score": safe_score, "passed": grade_result["passed"],
+                "score": safe_final_score, "passed": grade_result["passed"],
                 "feedback": grade_result["feedback"],
                 "steps_taken": state.step_count if state else 1,
                 "total_reward": safe_total_reward,
@@ -719,8 +719,8 @@ if __name__ == "__main__":
         for _t in ["easy", "medium", "hard"]:
             _ep = str(_uuid.uuid4())
             sys.stdout.write(f'[START] {{"event":"START","task":"{_t}","episode_id":"{_ep}","model":"{_m}"}}\n')
-            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","reward":0.05,"done":true}}\n')
-            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false}}\n')
+            sys.stdout.write(f'[STEP] {{"event":"STEP","task":"{_t}","episode_id":"{_ep}","step":1,"action":"recommend_scheme","scheme_name":null,"reward":0.05,"reason":"Fatal error fallback","done":true}}\n')
+            sys.stdout.write(f'[END] {{"event":"END","task":"{_t}","episode_id":"{_ep}","score":0.05,"passed":false,"feedback":["Fatal error"],"steps_taken":1,"total_reward":0.05}}\n')
             sys.stdout.flush()
     finally:
         os._exit(0)
